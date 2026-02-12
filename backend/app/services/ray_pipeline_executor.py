@@ -427,9 +427,9 @@ def dataflow_pipeline_execute(pipeline_config: Dict[str, Any], dataflow_runtime:
                 for param in op.get("params", {}).get("run", []):
                     param_name = param.get("name")
                     param_value = param.get("value")
-                    if param.get('kind') == "VAR_KEYWORD" and isinstance(param_value, dict):
-                        for key, value in param_value.items():
-                            run_params[key] = value
+                    if param.get('kind') == "VAR_KEYWORD":
+                        for item in param_value:
+                            run_params[item.get("name")] = item.get("value") if item.get("value") is not None else item.get("default_value")
                     else:
                         run_params[param_name] = param_value
                 
