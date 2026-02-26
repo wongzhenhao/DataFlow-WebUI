@@ -161,6 +161,15 @@ class OperatorRegistry:
         log.info(f"Loaded {len(self.op_obj_map)} operators.")
 
 
+    def refresh(self):
+        if hasattr(self._op_registry, "_init_loaders"):
+            self._op_registry._init_loaders()
+        if hasattr(self._op_registry, "_get_all"):
+            self._op_registry._get_all()
+        self.op_obj_map = self._op_registry.get_obj_map()
+        self.op_to_type = self._op_registry.get_type_of_objects()
+        return {"num_ops": len(self.op_obj_map)}
+
     def get_op_list(self, lang: str = "zh") -> list[dict]:
         """Get simplified operator list (computed on demand) for frontend listing."""
 
