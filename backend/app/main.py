@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from starlette.responses import Response
 from pathlib import Path
+import df_mxc
 
 app = FastAPI()
 
@@ -50,3 +51,14 @@ def spa_fallback(full_path: str):
         # 例如 /ui/assets/xxx.js 这种静态文件会被直接命中
         return FileResponse(target)
     return FileResponse(INDEX_FILE)
+
+# --- 3. Startup event to refresh operator cache ---
+@app.on_event("startup")
+def startup_refresh_ops_cache():
+    try:
+        for lang in ("zh", "en"):
+            container.operator_registry.refresh()
+            container.operator_registry.dump_ops_to_json(lang=lang)
+        logger.info("Operator cache regenerated at startup.")
+    except Exception as e:
+        logger.error(f"Failed to regenerate operator cache at startup: {e}")
