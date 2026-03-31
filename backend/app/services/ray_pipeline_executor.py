@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional, List
 from app.core.config import settings
 import asyncio
 import json
+import inspect
 import os
 from datetime import datetime
 import traceback
@@ -17,6 +18,8 @@ import sys
 import re
 import time
 from contextlib import redirect_stdout, redirect_stderr
+
+from app.services.param_coercion import coerce_param_value
 
 logger = get_logger(__name__)
 
@@ -262,13 +265,22 @@ def dataflow_pipeline_execute(pipeline_config: Dict[str, Any], dataflow_runtime:
             try:
                 init_params = {}
                 run_params = {}
+
+                operator_cls_name = extract_class_name(op_name)
+                operator_cls = OPERATOR_REGISTRY.get(operator_cls_name)
+                if not operator_cls:
+                    raise DataFlowEngineError(
+                        f"Operator class not found: {operator_cls_name}",
+                        context={"operator": op_name, "operator_index": op_idx}
+                    )
+                init_sig = inspect.signature(getattr(operator_cls, "__init__", lambda: None))
+                run_sig = inspect.signature(getattr(operator_cls, "run", lambda: None))
                 
                 # 处理 init 参数
                 for param in op.get("params", {}).get("init", []):
                     param_name = param.get("name")
                     param_value = param.get("value")
-                    if isinstance(param_value, str) and param_value == "":
-                        param_value = None
+                    default_value = param.get("default_value")
                     try:
                         if param_name == "llm_serving":
                             serving_id = param_value
@@ -406,6 +418,9 @@ def dataflow_pipeline_execute(pipeline_config: Dict[str, Any], dataflow_runtime:
                                 for param in param_value.get("params", []):
                                     param_dict[param.get("name")] = param.get("value") if param.get("value") is not None else param.get("default_value")
                                 param_value = prompt_cls(**param_dict)
+                        else:
+                            ann = init_sig.parameters.get(param_name).annotation if param_name in init_sig.parameters else inspect.Parameter.empty
+                            param_value = coerce_param_value(param_value, annotation=ann, default_value=default_value)
                         
                         init_params[param_name] = param_value
                         
@@ -427,22 +442,18 @@ def dataflow_pipeline_execute(pipeline_config: Dict[str, Any], dataflow_runtime:
                 for param in op.get("params", {}).get("run", []):
                     param_name = param.get("name")
                     param_value = param.get("value")
+                    default_value = param.get("default_value")
                     if param.get('kind') == "VAR_KEYWORD":
                         for item in param_value:
-                            run_params[item.get("name")] = item.get("value") if item.get("value") is not None else item.get("default_value")
+                            item_name = item.get("name")
+                            item_val = item.get("value") if item.get("value") is not None else item.get("default_value")
+                            item_default = item.get("default_value")
+                            run_params[item_name] = coerce_param_value(item_val, annotation=inspect.Parameter.empty, default_value=item_default)
                     else:
-                        run_params[param_name] = param_value
+                        ann = run_sig.parameters.get(param_name).annotation if param_name in run_sig.parameters else inspect.Parameter.empty
+                        run_params[param_name] = coerce_param_value(param_value, annotation=ann, default_value=default_value)
                 
                 # 实例化 Operator
-                operator_cls_name = extract_class_name(op_name)
-                operator_cls = OPERATOR_REGISTRY.get(operator_cls_name)
-                
-                if not operator_cls:
-                    raise DataFlowEngineError(
-                        f"Operator class not found: {operator_cls_name}",
-                        context={"operator": op_name, "operator_index": op_idx}
-                    )
-                
                 operator_instance = operator_cls(**init_params)
                 run_op.append((operator_instance, run_params, op_name, op_key))
                 
