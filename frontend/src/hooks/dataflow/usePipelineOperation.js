@@ -147,6 +147,20 @@ export function usePipelineOperation() {
                     x: idx === 0 ? basicPos.x : formatOperators[idx - 1].location.x + 350,
                     y: basicPos.y
                 }
+            // 预处理operatorParams，确保节点渲染时立即可用
+            if (item._cache_parameter) {
+                let initParams = item._cache_parameter.init || []
+                let runParams = item._cache_parameter.run || []
+                initParams.forEach(p => {
+                    if (!p.value && p.value !== 0) p.value = p.default_value || ''
+                    p.show = p.name !== 'prompt_template'
+                })
+                runParams.forEach(p => {
+                    if (!p.value && p.value !== 0) p.value = p.default_value || ''
+                    p.show = true
+                })
+                item.operatorParams = { init: initParams, run: runParams }
+            }
             // 生成节点唯一ID
             item.nodeId = $Guid()
             // 添加节点到流程图

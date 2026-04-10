@@ -37,16 +37,22 @@
                         <div v-if="choosenClsItem && choosenClsItem.params"
                             v-for="(param, p_index) in choosenClsItem.params">
                             <div class="serving-item-row column">
-                                <p class="serving-item-light-title">{{ param.name }}</p>
-                                <fv-text-box :theme="theme" v-model="param.value" :placeholder="local(param.name)"
+                                <p class="serving-item-light-title">{{ param.name }}
+                                    <span v-if="param.name === 'api_key'" class="serving-item-badge">KEY</span>
+                                </p>
+                                <fv-text-box v-if="param.name === 'api_key'" :theme="theme" v-model="param.value"
+                                    :placeholder="local('API Key')" border-radius="6" :reveal-border="true"
+                                    :is-box-shadow="true" type="password"></fv-text-box>
+                                <fv-text-box v-else :theme="theme" v-model="param.value" :placeholder="local(param.name)"
                                     border-radius="6" :reveal-border="true" :is-box-shadow="true"></fv-text-box>
                             </div>
                             <hr />
                         </div>
                     </template>
                 </fv-Collapse>
-                <fv-Collapse :theme="theme" v-for="(item, index) in servingList" :key="index" class="serving-item"
-                    icon="DialShape4" :title="item.name" :content="item.cls_name" :max-height="740">
+                <fv-Collapse :theme="theme" v-for="(item, index) in servingList" :key="item.id || index"
+                    class="serving-item" icon="DialShape4" :title="item.name"
+                    :content="servingSummary(item)" :max-height="740">
                     <template v-slot:extension>
                         <fv-button theme="dark" background="rgba(191, 95, 95, 1)" foreground="rgba(255, 255, 255, 1)"
                             border-radius="6" :is-box-shadow="true" style="width: 90px"
@@ -61,6 +67,10 @@
                                 <p class="serving-item-light-title">{{ local('ID') }}</p>
                                 <p class="serving-item-std-info">{{ item.id }}</p>
                             </div>
+                            <div class="serving-item-row column no-pad" style="flex: 1">
+                                <p class="serving-item-light-title">{{ local('CLS Name') }}</p>
+                                <p class="serving-item-std-info">{{ item.cls_name }}</p>
+                            </div>
                             <fv-button v-show="item.edit" theme="dark" :is-box-shadow="true" :background="gradient"
                                 border-radius="6" :disabled="!checkEdit(item) || !lock.edit"
                                 style="width: 90px; margin-right: 5px" @click="confirmEdit(item)">
@@ -74,16 +84,25 @@
                         <hr />
                         <div class="serving-item-row column">
                             <p class="serving-item-light-title">{{ local('Serving Name') }}</p>
-                            <fv-text-box :theme="theme" v-model="item.serving_name" border-radius="6"
-                                :disabled="!item.edit" :reveal-border="true" :is-box-shadow="item.edit"></fv-text-box>
+                            <fv-text-box v-if="item.edit" :theme="theme" v-model="item.serving_name" border-radius="6"
+                                :reveal-border="true" :is-box-shadow="true"></fv-text-box>
+                            <p v-else class="serving-item-value">{{ item.serving_name || item.name }}</p>
                         </div>
                         <hr />
-                        <div v-for="(param, p_index) in item.params">
+                        <div v-for="(param, p_index) in item.params" :key="param.name">
                             <div class="serving-item-row column">
-                                <p class="serving-item-light-title">{{ param.name }}</p>
-                                <fv-text-box :theme="theme" v-model="param.value" border-radius="6"
-                                    :disabled="!item.edit" :reveal-border="true"
-                                    :is-box-shadow="item.edit"></fv-text-box>
+                                <p class="serving-item-light-title">{{ param.name }}
+                                    <span v-if="param.name === 'api_key'" class="serving-item-badge">KEY</span>
+                                </p>
+                                <template v-if="item.edit">
+                                    <fv-text-box v-if="param.name === 'api_key'" :theme="theme" v-model="param.value"
+                                        :placeholder="param.masked ? local('Enter new key to update, or leave to keep current') : local('API Key')"
+                                        border-radius="6" :reveal-border="true" :is-box-shadow="true"
+                                        type="password"></fv-text-box>
+                                    <fv-text-box v-else :theme="theme" v-model="param.value" border-radius="6"
+                                        :reveal-border="true" :is-box-shadow="true"></fv-text-box>
+                                </template>
+                                <p v-else class="serving-item-value">{{ safeDisplay(param) }}</p>
                             </div>
                             <hr />
                         </div>
@@ -171,6 +190,26 @@ export default {
         ...mapActions(useDataflow, {
             getGlobalServingList: 'getServingList',
         }),
+        servingSummary(item) {
+            let parts = [item.cls_name]
+            if (item.params) {
+                for (let p of item.params) {
+                    let val = this.formatPropsValue(p.value != null ? p.value : p.default_value)
+                    if (p.name === 'model_name' && val) {
+                        parts.push('Model: ' + val)
+                    } else if (p.name === 'api_url' && val) {
+                        let short = val.length > 40 ? val.substring(0, 40) + '...' : val
+                        parts.push('URL: ' + short)
+                    }
+                }
+            }
+            return parts.join('  |  ')
+        },
+        safeDisplay(param) {
+            let val = param.value != null ? param.value : param.default_value
+            if (val == null) return '—'
+            return String(val)
+        },
         getCreateProps() {
             this.$api.serving.list_serving_classes().then((res) => {
                 if (res.data) {
@@ -190,19 +229,22 @@ export default {
         },
         async getServingList() {
             let res = await this.getGlobalServingList()
-            if (res.data) {
+            if (res && res.data) {
                 let servingList = res.data
                 servingList.forEach((item) => {
+                    item.edit = false
+                    item.response = ''
+                    item.serving_name = item.name || ''
                     this.resetEditParams(item, true)
                 })
                 this.servingList = servingList
             }
         },
         formatPropsValue(val) {
-            if (val === null) return null
+            if (val == null) return null
             if (typeof val === 'string') return val
             if (typeof val === 'object') return JSON.stringify(val)
-            return val.toString()
+            return String(val)
         },
         resetAddParams() {
             this.servingName = ''
@@ -217,20 +259,22 @@ export default {
             item.serving_name = item.name
             if (item.params) {
                 for (let param of item.params) {
-                    param.value = this.formatPropsValue(param.value)
+                    let raw = param.value != null ? param.value : param.default_value
+                    param.value = this.formatPropsValue(raw)
                     if (overide) {
-                        if (param.value !== null) param.default_value = this.formatPropsValue(param.value)
+                        param.default_value = this.formatPropsValue(raw)
                     } else {
-                        if (param.default_value !== null)
+                        if (param.default_value != null)
                             param.value = this.formatPropsValue(param.default_value)
-                        else param.value = this.defaultValues[param.type]
+                        else param.value = this.defaultValues[param.type] || ''
                     }
                 }
             }
         },
         valueBuilder(item) {
             let type = item.type
-            return this.formatValues[type](item.value)
+            let fn = this.formatValues[type]
+            return fn ? fn(item.value) : item.value
         },
         handleAdd() {
             this.show.add ^= true
@@ -291,8 +335,6 @@ export default {
                 .then((res) => {
                     if (res.code === 200) {
                         this.getServingList()
-                        item.edit ^= true
-                        this.resetEditParams(item)
                         this.$barWarning(this.local('Update Success'), {
                             status: 'correct'
                         })
@@ -311,8 +353,18 @@ export default {
                 })
         },
         handleEdit(item) {
-            item.edit ^= true
-            this.resetEditParams(item)
+            item.edit = !item.edit
+            if (item.edit) {
+                if (item.params) {
+                    for (let param of item.params) {
+                        if (param.name === 'api_key' && param.masked) {
+                            param.value = ''
+                        }
+                    }
+                }
+            } else {
+                this.resetEditParams(item)
+            }
         },
         testServing(item) {
             if (!this.lock.test) return
@@ -388,6 +440,7 @@ export default {
             }
             if (item.params) {
                 for (let param of item.params) {
+                    if (param.name === 'api_key') continue
                     if (!param.value) {
                         return false
                     }
@@ -415,6 +468,18 @@ export default {
             .title-block {
                 .main-title {
                     color: whitesmoke;
+                }
+            }
+
+            .content-block .serving-item {
+                .serving-item-value {
+                    color: rgba(220, 220, 220, 1);
+                    background: rgba(50, 50, 50, 1);
+                    border-color: rgba(70, 70, 70, 1);
+                }
+
+                .serving-item-std-info {
+                    color: rgba(220, 220, 220, 1);
                 }
             }
         }
@@ -478,6 +543,18 @@ export default {
                     user-select: none;
                 }
 
+                .serving-item-badge {
+                    display: inline-block;
+                    font-size: 10px;
+                    font-weight: 600;
+                    padding: 1px 6px;
+                    margin-left: 6px;
+                    border-radius: 4px;
+                    background: rgba(123, 139, 209, 0.15);
+                    color: rgba(123, 139, 209, 1);
+                    vertical-align: middle;
+                }
+
                 .serving-item-info {
                     margin: 5px 0px;
                     font-size: 12px;
@@ -489,6 +566,22 @@ export default {
                     font-size: 13.8px;
                     color: rgba(27, 27, 27, 1);
                     user-select: none;
+                }
+
+                .serving-item-value {
+                    width: 100%;
+                    font-size: 13.8px;
+                    color: rgba(27, 27, 27, 1);
+                    padding: 6px 10px;
+                    margin: 2px 0;
+                    border-radius: 6px;
+                    background: rgba(245, 245, 245, 1);
+                    border: 1px solid rgba(220, 220, 220, 1);
+                    word-break: break-all;
+                    box-sizing: border-box;
+                    user-select: text;
+                    min-height: 32px;
+                    line-height: 1.4;
                 }
 
                 .serving-item-bold-info {

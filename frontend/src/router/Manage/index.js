@@ -30,7 +30,7 @@ export default {
             meta: {
                 title: 'Dataflow-Settings'
             }
-        }
+        },
     ],
     meta: {
         title: 'Dataflow-WebUI'
