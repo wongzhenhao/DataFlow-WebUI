@@ -1,6 +1,8 @@
 # Profile: `harness`
 
-The DataFlow Harness backend: FastAPI service, MCP server, operator registry, pipeline validation. No frontend, no Node.js.
+The AI4S-oriented DataFlow Harness for text-modal science data: FastAPI, MCP,
+live operator routing, pipeline validation, and evidence-grounded workflow
+skills. No frontend, no Node.js.
 
 ```bash
 ./install.sh --profile harness
@@ -8,7 +10,15 @@ The DataFlow Harness backend: FastAPI service, MCP server, operator registry, pi
 
 ## What this is for
 
-You drive DataFlow from Claude Code, Codex or Cursor and want the agent to query your **actual** operator registry, validate a pipeline before committing it, and execute it — without a browser.
+You drive DataFlow from Claude Code, Codex or Cursor and want the agent to build
+pipelines for papers, abstracts, scientific sections, or research corpora. The
+agent queries your **actual** operator registry, preserves source/evidence fields,
+validates a pipeline before committing it, and executes it — without a browser.
+
+Scientific text is the default specialization, not a separate runtime: PDF/URL
+ingestion routes through `knowledge_cleaning`, while extraction, claim-evidence,
+grounded QA, synthesis, and fidelity checks route through `core_text`. General
+text pipelines remain supported.
 
 This is a real product layer, not "webui with the frontend deleted". It installs on a machine with no Node.js.
 

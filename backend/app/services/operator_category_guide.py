@@ -15,7 +15,9 @@ is introduced upstream.
 CATEGORY_GUIDE: dict[str, dict] = {
     "core_text": {
         "use_for": (
-            "通用文本→QA / 多跳 QA / 摘要 / 长文本切块生成；prompt-driven 的 "
+            "AI4S 科学文本默认入口：论文/摘要/章节的结构化抽取、claim-evidence 绑定、"
+            "有依据的 QA/摘要，以及跨 source/output 字段的事实与数值一致性评估；"
+            "也用于通用文本→QA / 多跳 QA / 长文本切块生成和 prompt-driven 的 "
             "filter / refine / evaluator (PromptedFilter/PromptedRefiner/"
             "PromptedEvaluator)；表格/字段重写用 PandasOperator。"
             "首选这一类做『从原始文本生成 SFT 训练数据』。"
@@ -131,7 +133,8 @@ CATEGORY_GUIDE: dict[str, dict] = {
         "use_for": (
             "**文档/URL 摄取链路**：File/URL→Markdown 转换（API/Flash/Local 三种），"
             "KBC 切块、清洗、批量 QA 生成。把『PDF/HTML/网页 → 训练数据』的"
-            "前几步全部放在这里。"
+            "前几步全部放在这里。科学论文 PDF 应先检查双栏阅读顺序、页眉页脚、"
+            "表格/公式缺失和章节边界，再把干净文本交给 core_text。"
         ),
         "not_for": (
             "如果输入已经是干净纯文本，跳过这一类，直接去 core_text。"
@@ -181,8 +184,11 @@ CATEGORY_GUIDE: dict[str, dict] = {
         "examples": ["Speech2TextGenerator"],
     },
     "chemistry": {
-        "use_for": "化学领域：从文本抽取 SMILES、SMILES 等价数据集评估。",
-        "not_for": "其他领域不属于这里。",
+        "use_for": "化学结构专用能力：从文本抽取 SMILES、SMILES 等价数据集评估。",
+        "not_for": (
+            "不要因为论文主题是 chemistry/化学就选这里；论文摘要、方法、结果、"
+            "claim-evidence 或 QA 仍走 core_text。只有明确需要 SMILES 操作时才选。"
+        ),
         "examples": [
             "ExtractSmilesFromTextGenerator", "SmilesEquivalenceDatasetEvaluator",
         ],
@@ -244,16 +250,37 @@ def recommend_categories(task_description: str, dataset_columns: list[str] | Non
         score_map[cat] = score_map.get(cat, 0) + score
         reason_map.setdefault(cat, []).append(reason)
 
-    def avoid(cat: str, score: int, reason: str) -> None:
+    def avoid(cat: str, reason: str) -> None:
         avoid_map.setdefault(cat, []).append(reason)
-        score_map.setdefault(cat, 0)
 
     def has_any(*keywords: str) -> bool:
         return any(k in task_lower for k in keywords)
 
+    science_task = has_any(
+        'scientific paper', 'research paper', 'paper abstract', 'manuscript',
+        'literature', 'methods section', 'results section', 'experiment',
+        'claim-evidence', 'claim evidence', 'evidence quote', 'citation',
+        'scientific', '论文', '文献', '科研', '科学文本', '实验结果',
+        '方法章节', '结果章节', '证据片段', '引用',
+    )
+    science_columns = any(
+        col in {
+            'abstract', 'paper_text', 'section_text', 'methods', 'results',
+            'paper_id', 'document_id', 'doi', 'evidence', 'evidence_quote',
+        }
+        for col in col_lower
+    )
+
+    if science_task or science_columns:
+        add(
+            'core_text',
+            8 if science_task else 4,
+            'scientific text defaults to evidence-grounded core_text extraction, QA, or evaluation',
+        )
+
     if has_any('multi-hop', 'multihop', 'qa pair', 'question-answer', 'question answer', '问答', '多跳', 'qa对', 'qa 对'):
         add('core_text', 8, 'task explicitly asks for QA / multi-hop QA generation')
-        avoid('text_sft', 3, 'QA-from-text is not a text_sft construction task')
+        avoid('text_sft', 'QA-from-text is not a text_sft construction task')
 
     if has_any('summary', 'summarize', '摘要', '总结', 'classify', 'classification', 'sentiment', 'score', 'rewrite', 'paraphrase'):
         add('core_text', 4, 'task is LLM-style text generation / evaluation / refinement')
@@ -264,8 +291,10 @@ def recommend_categories(task_description: str, dataset_columns: list[str] | Non
     if has_any('emoji', 'html', 'url', 'whitespace', 'dedup', 'language detect', 'punctuation', '去重', '清洗', 'html实体', '标点', '空格'):
         add('general_text', 6, 'task mentions surface-form cleanup / language / dedup / deterministic text filters')
 
-    if has_any('pdf', 'markdown', '网页', 'url to markdown', 'chunk', '切块', '文档摄取', '知识库'):
-        add('knowledge_cleaning', 7, 'task starts from documents / URLs / PDF and likely needs ingestion operators')
+    if has_any('pdf', 'url to markdown', '网页', '文档摄取', 'document ingestion'):
+        add('knowledge_cleaning', 20, 'task starts from documents / URLs / PDF and needs ingestion before downstream text work')
+    elif has_any('markdown', 'chunk', '切块', '知识库'):
+        add('knowledge_cleaning', 7, 'task may need document normalization or chunking operators')
 
     if has_any('instruction', 'sft', 'alpaga', 'deita', 'superfiltering'):
         add('text_sft', 7, 'task explicitly mentions SFT / instruction-quality processing')
@@ -288,10 +317,12 @@ def recommend_categories(task_description: str, dataset_columns: list[str] | Non
     if has_any('speech', 'audio', '语音'):
         add('core_speech', 6, 'task explicitly mentions speech/audio')
 
-    if has_any('smiles', 'chemistry', '化学'):
-        add('chemistry', 6, 'task explicitly mentions chemistry / smiles')
+    if has_any('smiles', 'canonical smiles', 'smiles equivalence', '分子字符串'):
+        add('chemistry', 9, 'task explicitly requests a supported SMILES operation')
+    elif has_any('chemistry', '化学'):
+        avoid('chemistry', 'chemistry-themed prose remains a core_text task unless SMILES work is requested')
 
-    if any(col in {'chunk', 'text', 'doc', 'review_text', 'raw_content', 'content'} for col in col_lower):
+    if any(col in {'chunk', 'text', 'doc', 'review_text', 'raw_content', 'content', 'abstract', 'paper_text', 'section_text'} for col in col_lower):
         add('core_text', 2, 'dataset columns look like text-generation inputs')
 
     if any(col in {'url', 'pdf_path', 'markdown', 'html'} for col in col_lower):
@@ -304,7 +335,7 @@ def recommend_categories(task_description: str, dataset_columns: list[str] | Non
         add('code', 2, 'dataset columns resemble code-format data')
 
     if not score_map:
-        add('core_text', 1, 'default starting point for generic text pipelines')
+        add('core_text', 1, 'default starting point for scientific or general text pipelines')
         add('general_text', 1, 'secondary fallback for deterministic cleanup/filtering')
 
     ranked = sorted(score_map.items(), key=lambda item: (-item[1], item[0]))

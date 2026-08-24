@@ -2,20 +2,27 @@
 
 English: **[README.md](README.md)**
 
-用 Coding Agent 构建、运行和管理 [DataFlow](https://github.com/OpenDCAI/DataFlow) 数据管线 —— 可以通过可视化画布、通过 MCP，或只用 skills。
+用 Coding Agent 构建、运行和管理偏 AI4S 的
+[DataFlow](https://github.com/OpenDCAI/DataFlow) 数据管线 —— 可以通过可视化画布、
+通过 MCP，或只用 skills。默认专注文本模态科学数据：论文、摘要、章节和科研语料，
+并在处理过程中保留证据与来源信息。
 
 ## 名称说明
 
 | 名称 | 指什么 |
 |---|---|
 | **DataFlow** | 上游数据处理框架（[OpenDCAI/DataFlow](https://github.com/OpenDCAI/DataFlow)），以 `open-dataflow` 包安装。不是本仓库。 |
-| **DataFlow-Harness** | 本仓库构建的系统：skills + MCP + WebUI 的整体。产品名，也是论文名。 |
+| **DataFlow-Harness** | 本仓库构建的偏 AI4S 系统：科学文本 workflow skills + MCP + WebUI 的整体。产品名，也是论文名。 |
 | **DataFlow-WebUI** | 仓库名，同时特指可视化画布这一层。为保持链接稳定而沿用。 |
 | **`DataFlow-WebUI-<版本>.zip`** | 预构建前端的发布包，无需 clone 即可运行。见 [docs/RELEASE-PACKAGE.md](docs/RELEASE-PACKAGE.md)。 |
 
 本仓库提供**三个相互独立的层**，按需安装其中一个即可。
 这里的“独立”指安装和运行边界；内部的 standalone 与 MCP-aware Agent 指令
 统一从 `skills/canonical/` 渲染，避免出现两套需要分别维护的内容。
+
+科学文本模式是现有 NL2Pipeline 路径上的专门化，而不是第二套引擎。它优先处理
+文档摄取、科学结构化抽取、claim-evidence 绑定、grounded QA 与事实/数值一致性过滤，
+同时保留通用文本能力作为回退。
 
 ## 我该装哪一层？
 

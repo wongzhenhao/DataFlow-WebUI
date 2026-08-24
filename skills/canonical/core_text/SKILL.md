@@ -2,9 +2,11 @@
 name: core_text
 description: >-
   Reference documentation for DataFlow's core_text operators — 8 generators,
-  3 filters, 2 refiners and 5 evaluators. Read by generating-dataflow-pipeline
-  when a task needs an operator beyond the six core primitives. This is a
-  reference package, not a workflow: it is consulted, never invoked directly.
+  3 filters, 2 refiners and 5 evaluators — including their use in scientific
+  text extraction, grounded QA, refinement, and evidence-quality evaluation.
+  Read by generating-dataflow-pipeline when a task needs an operator beyond the
+  six core primitives. This is a reference package, not a workflow: consult it,
+  never invoke it directly.
 ---
 
 # core_text operator reference
@@ -40,9 +42,12 @@ core_text/<category>/<operator>/
 
 ## How to use it
 
-1. Find the operator's directory under its category.
-2. Read its `SKILL.md` for the authoritative signature.
-3. Check that operator's `bad.md` example before writing code — it documents the
+1. For scientific papers, abstracts, or research sections, first apply
+   `../generating-dataflow-pipeline/references/science_text_mode.md`; use this
+   package only to resolve the selected operator's exact behavior.
+2. Find the operator's directory under its category.
+3. Read its `SKILL.md` for the authoritative signature.
+4. Check that operator's `bad.md` example before writing code — it documents the
    failure modes that come up most often.
 
 ## Accuracy and scope

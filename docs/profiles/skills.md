@@ -1,6 +1,7 @@
 # Profile: `skills`
 
-Agent skills for writing DataFlow pipelines by hand. No server, no MCP, no packages.
+AI4S-oriented agent skills for writing evidence-grounded scientific-text
+DataFlow pipelines by hand. No server, no MCP, no packages.
 
 ```bash
 ./install.sh --profile skills
@@ -8,7 +9,10 @@ Agent skills for writing DataFlow pipelines by hand. No server, no MCP, no packa
 
 ## What this is for
 
-You want Claude Code, Codex or Cursor to write *correct* DataFlow code — right operators, right parameter names, right field ordering — and you are happy running `python pipeline.py` yourself.
+You want Claude Code, Codex or Cursor to write *correct* DataFlow code for
+papers, abstracts, scientific sections, or research corpora — right operators,
+right parameter names, right field ordering, explicit provenance, and scientific
+quality gates — and you are happy running `python pipeline.py` yourself.
 
 ## What this is not for
 
@@ -39,8 +43,8 @@ Five skills:
 
 | Skill | Invoke | What it does |
 |---|---|---|
-| `generating-dataflow-pipeline` | `/generating-dataflow-pipeline` | Target + sample JSONL → operator chain → runnable pipeline |
-| `dataflow-dev` | `/dataflow-dev` | Developer assistant: new operators/pipelines/prompts, diagnose errors, code review |
+| `generating-dataflow-pipeline` | `/generating-dataflow-pipeline` | Scientific target + sample JSONL → evidence contract → operator chain → runnable pipeline |
+| `dataflow-dev` | `/dataflow-dev` | Developer assistant with scientific-text intake: new operators/pipelines/prompts, diagnose errors, code review |
 | `dataflow-operator-builder` | `/dataflow-operator-builder` | Scaffold an operator with registration, CLI wrapper and tests |
 | `prompt-template-builder` | `/prompt-template-builder` | Build reusable `prompt_template` classes |
 | `core_text` | *(not invoked)* | Per-operator API reference the pipeline skill reads |
@@ -73,9 +77,10 @@ Then in Claude Code:
 
 ```
 /generating-dataflow-pipeline
-Target: Generate product descriptions and filter high-quality ones
-Sample file: ./data/products.jsonl
-Expected outputs: generated_description, quality_score
+Target: Extract findings and verbatim evidence from scientific abstracts
+Sample file: ./data/paper_abstracts.jsonl
+Expected outputs: claim_record, fidelity_score
+Evidence contract: source_only
 ```
 
 You should get an operator decision JSON followed by a complete pipeline `.py`. If the slash command does not appear in completion, restart the agent so it rescans the skills directory.

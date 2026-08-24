@@ -8,11 +8,11 @@
   ],
   "id": "skills",
   "label": "Standalone skills only",
-  "description": "Agent skills for writing DataFlow pipelines by hand in Claude Code / Codex / Cursor. No MCP, no backend, no services.",
-  "audience": "Users who want their coding agent to write DataFlow code directly, with no server running.",
+  "description": "AI4S-oriented agent skills for writing evidence-grounded scientific-text DataFlow pipelines in Claude Code / Codex / Cursor. No MCP, no backend, no services.",
+  "audience": "Users who want their coding agent to write scientific-paper, abstract, section, or research-corpus DataFlow code directly, with no server running.",
   "installs": [
     "Standalone skills (no MCP dependency) into a Claude Code / Cursor skills directory",
-    "The core_text operator reference the pipeline skill reads"
+    "The scientific-text-aware core_text operator reference the pipeline skill reads"
   ],
   "does_not_install": [
     "Python packages (no pip install at all)",

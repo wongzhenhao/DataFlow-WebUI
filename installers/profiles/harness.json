@@ -6,8 +6,8 @@
   ],
   "id": "harness",
   "label": "Harness backend + MCP (no WebUI)",
-  "description": "The DataFlow Harness backend: FastAPI service, MCP server over SSE, operator registry, pipeline validation, plus the MCP-aware workflow skills. Driven from Claude Code / Codex / Cursor — no browser UI.",
-  "audience": "Users who drive DataFlow from an agent via MCP and never open the canvas.",
+  "description": "The AI4S-oriented DataFlow Harness for text-modal science data: FastAPI, MCP over SSE, live operator routing, pipeline validation, and evidence-grounded workflow skills. Driven from Claude Code / Codex / Cursor — no browser UI.",
+  "audience": "Users who build scientific-paper, abstract, section, or research-corpus pipelines from an agent via MCP and never open the canvas.",
   "installs": [
     "The DataFlow framework (open-dataflow) via uv (or pip with --pip)",
     "Backend Python dependencies from backend/requirements.txt",

@@ -1,21 +1,22 @@
 ---
 name: generating-dataflow-pipeline
-description: Plan and write a standard DataFlow pipeline from a target and representative JSONL data. Use when a user asks to select DataFlow operators, trace field dependencies, generate runnable pipeline code, or repair a pipeline with schema or field-flow errors.
+description: Plan and write evidence-grounded DataFlow pipelines for text-modal scientific data such as papers, abstracts, sections, and research corpora. Use for scientific ingestion, structured extraction, claim-evidence records, grounded QA, synthesis, quality filtering, operator selection, field-flow repair, and runnable pipeline generation from representative JSONL data. General text remains supported as a fallback.
 ---
-# DataFlow Pipeline Code Generator
+# AI4S Scientific-Text Pipeline Generator
 
 ## Goal
 
 This skill is used when users provide:
 
-- **Target**: What the pipeline should achieve
+- **Target**: What scientific-data pipeline should achieve
 - **Sample Data File**: Path to a JSONL file containing 1-5 representative data samples
+- **Evidence Contract**: Optional grounding, provenance, citation, and missing-value requirements
 
 The skill must:
 
 1. **Read and analyze the JSONL file** at the provided path
-2. Infer data structure, field types, and content characteristics
-3. Determine task type based on file content (document processing, text transformation, multi-field composition)
+2. Infer data structure, scientific content, provenance fields, field types, and content characteristics
+3. Determine task type (document ingestion, scientific extraction, claim-evidence binding, grounded QA, synthesis, evaluation)
 4. Select appropriate operators from preferred primitives
 5. Validate field dependencies
 6. Output intermediate operator decision summary
@@ -29,13 +30,14 @@ Users provide:
 Target: [Clear task description]
 Sample file: [Path to JSONL file, e.g., ./data/input.jsonl]
 Expected outputs: [Optional field list]
+Evidence contract: [Optional; source_only by default for scientific text]
 ```
 
 **Important**: The sample file is a JSONL file (one JSON object per line), not a JSON array.
 
 ## Preferred Operator Strategy
 
-**Six Core Primitives** (high-coverage operators for most data science tasks):
+**Six Core Primitives** (high-coverage operators for scientific-text tasks):
 
 1. `PromptedGenerator` - Single-field LLM generation
 2. `FormatStrPromptedGenerator` - Multi-field template generation
@@ -46,22 +48,39 @@ Expected outputs: [Optional field list]
 
 These are **preferred primitives**, not fixed workflows. They can be used repeatedly and combined flexibly.
 
+## Scientific-Text Mode (MANDATORY DEFAULT)
+
+Treat papers, abstracts, research reports, methods/results sections, and
+scientific corpora as `science_text` mode. Before choosing prompts or operators,
+read [`references/science_text_mode.md`](references/science_text_mode.md) and
+apply its evidence contract, failure checks, and release gates.
+
+Default scientific tasks to `grounding=source_only`: preserve source identity,
+require evidence for claims, keep numbers/units/formulas unchanged, use null or
+`Unknown` for missing support, and label source-backed, inferred, simulated, and
+illustrative content. Never invent citations or location metadata.
+
 ## Operator Selection Priority Rule (MANDATORY)
 
 When a specialized operator exists for the task, it MUST be used over generic operators. Do NOT use `PromptedGenerator` to replicate functionality that a dedicated operator already provides.
 
 **Decision table** (check in order, use the first match):
 
-| Task / Scenario                                 | Required Operator                                                                               | Do NOT use                                 |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| Generate QA pairs from text                     | `Text2MultiHopQAGenerator`                                                                    | `PromptedGenerator` with QA prompt       |
-| Convert file path / URL to text                 | KBC trio (`FileOrURLToMarkdownConverterFlash` → `KBCChunkGenerator` → `KBCTextCleaner`) | `PromptedGenerator` to summarize files   |
-| Score / evaluate using multiple fields          | `FormatStrPromptedGenerator` + `GeneralFilter`                                              | `PromptedFilter` (single input_key only) |
-| Filter by deterministic rule on existing fields | `GeneralFilter`                                                                               | `PromptedFilter`                         |
-| Generate new content from a single field        | `PromptedGenerator`                                                                           | —                                         |
-| Generate new content from multiple fields       | `FormatStrPromptedGenerator`                                                                  | Multiple `PromptedGenerator` steps       |
+| Task / Scenario | Required Operator | Do NOT use |
+| --- | --- | --- |
+| Extract scientific records from multiple source/provenance fields | `FormatStrPromptedGenerator` with strict JSON | Free-form `PromptedGenerator` output |
+| Bind scientific claims to evidence | `FormatStrPromptedGenerator`; require verbatim evidence or `Unknown` | Uncited synthesis |
+| Generate grounded QA pairs from text | `Text2MultiHopQAGenerator`; retain `supporting_facts` | `PromptedGenerator` with a QA prompt |
+| Convert file path / URL to text | KBC trio (`FileOrURLToMarkdownConverterFlash` → `KBCChunkGenerator` → `KBCTextCleaner`) | `PromptedGenerator` to summarize files |
+| Score source/output fidelity using multiple fields | `FormatStrPromptedGenerator` + `GeneralFilter` | `PromptedFilter` (single `input_key` only) |
+| Filter by deterministic rule on existing fields | `GeneralFilter` | `PromptedFilter` |
+| Generate new content from one / multiple fields | `PromptedGenerator` / `FormatStrPromptedGenerator` | Unnecessary fragmented LLM stages |
 
-**Key principle**: `PromptedGenerator` is the fallback for generic single-field generation. If the target mentions "QA", "question-answer", "问答" — always reach for `Text2MultiHopQAGenerator` first.
+**Key principle**: Gather source evidence before synthesis. `PromptedGenerator`
+is only the fallback for generic single-field generation. If the target mentions
+"QA", "question-answer", or "问答", reach for `Text2MultiHopQAGenerator` first.
+Do not select the `chemistry` category merely because the source is a chemistry
+paper; reserve it for supported structured tasks such as SMILES operations.
 <!-- @if mcp==yes -->
 In MCP mode, browse top-level category `core_text`; do not hallucinate query categories like `core_text/generate`.
 If both `core_text` and another top-level category seem plausible, call `recommend_operator_categories` with the task description plus dataset columns before spending more MCP context. Treat its result as a hard budget: inspect at most the top 1-2 suggested categories, then switch to `get_operator_detail_by_name` instead of further category scans.
@@ -78,9 +97,11 @@ When this skill is used with MCP and a registered dataset, first call `get_datas
 3. **Generate missing fields**: Use `PromptedGenerator` or `FormatStrPromptedGenerator` to create missing semantic fields
 4. **Never reference before creation**: Cannot consume a field before it exists
 5. **Avoid overwriting**: Do not overwrite original user fields unless explicitly requested
+6. **Preserve provenance**: Carry stable source/document ids and supplied section/page/chunk locations through scientific stages
+7. **Separate evidence and synthesis**: Store source spans, generated claims, support status, and scores in distinct fields
 <!-- @if mcp==yes -->
-6. **If committing through MCP**: call `validate_pipeline_config` before create/update; field-flow errors should be fixed before commit
-7. If `validate_pipeline_config` returns `missing_input_field`, treat its `suggested_fields` and `repair_hint` as the first repair path. Fix the binding and re-validate; do **not** broaden MCP browsing or switch categories just because a field name was wrong.
+8. **If committing through MCP**: call `validate_pipeline_config` before create/update; field-flow errors should be fixed before commit
+9. If `validate_pipeline_config` returns `missing_input_field`, treat its `suggested_fields` and `repair_hint` as the first repair path. Fix the binding and re-validate; do **not** broaden MCP browsing or switch categories just because a field name was wrong.
 <!-- @endif -->
 
 ```
@@ -128,19 +149,24 @@ Output this first:
 
 ```json
 {
+  "mode": "science_text",
+  "grounding": "source_only",
   "ops": ["OperatorA", "OperatorB", "OperatorC"],
   "field_flow": "field_a -> field_b -> field_c",
+  "provenance_fields": ["source_id", "section", "evidence_quote"],
+  "quality_gates": ["schema validity", "evidence fidelity", "numeric fidelity"],
   "reason": "Why this ordered operator chain satisfies the target, how field dependencies are satisfied, and why prompted operators are or are not used."
 }
 ```
 
-### Stage 2: Complete Response (5 sections)
+### Stage 2: Complete Response (6 sections)
 
 1. **Field Mapping**: Map sample fields to semantic roles, identify fields to generate
 2. **Ordered Operator List**: List operators in execution order with justification
-3. **Reasoning Summary**: Explain operator selection, field flow, why this design
-4. **Complete Standard Pipeline Code**: Full executable Python following repository style
-5. **Adjustable Parameters / Caveats**: Tunable parameters, fallback strategies, debugging tips
+3. **Evidence and Provenance Contract**: State grounding boundary, evidence fields, missing-data behavior, and integrity gates
+4. **Reasoning Summary**: Explain operator selection, field flow, and why this design
+5. **Complete Standard Pipeline Code**: Full executable Python following repository style
+6. **Adjustable Parameters / Caveats**: Tunable parameters, fallbacks, scientific-data failure modes, and debugging tips
 
 ## LLM Serving Pre-check Rule (MANDATORY)
 
@@ -432,7 +458,13 @@ Analyze sample data content to determine task nature:
 - → KBC trio in order: `FileOrURLToMarkdownConverterFlash` → `KBCChunkGenerator` → `KBCTextCleaner` (supports `.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.html`, `.xml`, `.txt`, `.md`)
 - → Document/file processing workflow
 
-**Plain text fields** (e.g., `text`, `content`, `review_text`):
+**Scientific text fields** (e.g., `abstract`, `section_text`, `paper_text`, `methods`, `results`):
+
+- → Enter scientific-text mode and read `references/science_text_mode.md`
+- → Preserve `paper_id`/`document_id` plus supplied section, page, and chunk fields
+- → Prefer strict structured extraction, evidence-grounded QA, or source/output fidelity scoring
+
+**Other plain text fields** (e.g., `text`, `content`, `review_text`):
 
 - → Use `PromptedGenerator`, `PromptedFilter`, `Text2MultiHopQAGenerator`, `FormatStrPromptedGenerator`, `GeneralFilter`
 - → Do NOT use KBC
@@ -450,5 +482,6 @@ See `examples/` folder for complete workflows:
 2. **`examples/multifield_scoring.md`** — `FormatStrPromptedGenerator` with multi-field scoring
 3. **`examples/multi_stage_pipeline.md`** — Multiple `PromptedGenerator` stages + `GeneralFilter`
 4. **`examples/kbc_pdf_to_qa.md`** — KBC trio (`FileOrURLToMarkdownConverterFlash` + `KBCChunkGenerator` + `KBCTextCleaner`) + `Text2MultiHopQAGenerator` + `PromptedFilter` (scores nested QA_pairs column per chunk)
+5. **`examples/science_claim_evidence.md`** — Scientific claim/evidence extraction + multi-field fidelity gate
 
 These are strategy guidance, not templates to copy blindly. Generated code must follow standard pipeline structure.

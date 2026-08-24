@@ -5,14 +5,17 @@
 
 中文文档：**[README_zh.md](README_zh.md)**
 
-Build, run and manage [DataFlow](https://github.com/OpenDCAI/DataFlow) data pipelines with a coding agent — through a visual canvas, through MCP, or with skills alone.
+Build, run and manage AI4S-oriented [DataFlow](https://github.com/OpenDCAI/DataFlow)
+pipelines with a coding agent — through a visual canvas, through MCP, or with
+skills alone. The default specialization is text-modal scientific data: papers,
+abstracts, sections, and research corpora with evidence and provenance retained.
 
 ## Names you will see
 
 | Name | What it refers to |
 |---|---|
 | **DataFlow** | The upstream data-processing framework ([OpenDCAI/DataFlow](https://github.com/OpenDCAI/DataFlow)). Installed as the `open-dataflow` package. Not this repo. |
-| **DataFlow-Harness** | The system this repo builds: skills + MCP + WebUI working together. The name of the product, and of the paper. |
+| **DataFlow-Harness** | The AI4S-oriented system this repo builds: scientific-text workflow skills + MCP + WebUI working together. The name of the product, and of the paper. |
 | **DataFlow-WebUI** | The repository name, and the visual-canvas layer specifically. Kept for URL stability. |
 | **`DataFlow-WebUI-<version>.zip`** | A release package with the frontend pre-built, for running without a clone. See [docs/RELEASE-PACKAGE.md](docs/RELEASE-PACKAGE.md). |
 
@@ -20,6 +23,11 @@ This repo ships **three independent layers**. Install only the one you need.
 They are independent at install and runtime; internally, all agent variants are
 rendered from the same `skills/canonical/` source so the standalone and
 MCP-aware instructions cannot drift.
+
+Scientific-text mode is a specialization of the existing NL2Pipeline path, not
+a second engine. It favors document ingestion, structured scientific extraction,
+claim-evidence binding, grounded QA, and fidelity filtering while retaining the
+general text fallback.
 
 ## Which layer do I want?
 

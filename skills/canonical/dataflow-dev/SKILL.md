@@ -124,6 +124,12 @@ if TYPE_CHECKING:
 - 需要哪些算子（按功能描述，skill 来决定使用哪些算子）
 - 是否需要 LLM Serving，并发量要求
 - 是否需要断点续传（BatchedPipelineABC）
+- 对科学文本，确认研究对象与任务类型（摄取、结构化抽取、claim-evidence、grounded QA、评估）
+- 对科学文本，确认 source-only / 外部知识边界、来源 ID/章节字段、缺失证据处理和真实性标签
+
+科学文本默认采用 evidence-first：保留来源字段，不编造引用、数值、单位、公式或页码；
+将 source-backed、inferred、simulated、illustrative 内容分开标记。详细规则读取
+`../generating-dataflow-pipeline/references/science_text_mode.md`。
 
 ### Step 1.5: LLM Serving 前置检查（MANDATORY — 当 Pipeline 包含 LLM 算子时）
 
@@ -149,6 +155,7 @@ if TYPE_CHECKING:
 
 优先使用已有算子，参考 `context/knowledge_base.md` §八。
 若为 core_text 算子，参考 `generating-dataflow-pipeline` skill 的算子选择规则。
+论文主题属于化学不等于选择 chemistry 类；只有明确的 SMILES 抽取/等价评估才使用该类。
 
 ### Step 3: 生成代码
 

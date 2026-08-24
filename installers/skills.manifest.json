@@ -35,8 +35,8 @@
         "codex",
         "cursor"
       ],
-      "summary": "Plan an operator chain from a target + sample JSONL and emit a runnable pipeline. With MCP, also validates and commits it to the WebUI canvas.",
-      "version": "1.0.0"
+      "summary": "Plan evidence-grounded AI4S pipelines for scientific text from a target + sample JSONL, including ingestion, extraction, QA, provenance and quality gates. With MCP, also validates and commits them.",
+      "version": "1.1.0"
     },
     {
       "id": "dataflow-dev",
@@ -50,8 +50,8 @@
         "codex",
         "cursor"
       ],
-      "summary": "DataFlow developer assistant: loads architecture knowledge and routes intents (new operator / pipeline / prompt, diagnose, review).",
-      "version": "1.1.0"
+      "summary": "DataFlow developer assistant with scientific-text pipeline intake: loads architecture knowledge and routes intents (new operator / pipeline / prompt, diagnose, review).",
+      "version": "1.2.0"
     },
     {
       "id": "dataflow-operator-builder",
@@ -96,7 +96,7 @@
         "codex",
         "cursor"
       ],
-      "summary": "Per-operator API reference (8 generate, 3 filter, 2 refine, 5 eval). Documentation only — read by generating-dataflow-pipeline, never invoked directly.",
+      "summary": "Per-operator API reference for scientific and general text (8 generate, 3 filter, 2 refine, 5 eval). Documentation only — read by generating-dataflow-pipeline.",
       "kind": "reference",
       "contains_nested_skills": true
     }
@@ -137,8 +137,8 @@
     "the request against these and then reads only that skill's SKILL.md."
   ],
   "routing_triggers": {
-    "generating-dataflow-pipeline": "build a DataFlow pipeline from a target + sample JSONL, pick operators, or fix a pipeline that fails on field mismatches",
-    "dataflow-dev": "work inside the DataFlow repo itself: add an operator/pipeline/prompt, diagnose a DataFlow error, or review DataFlow code",
+    "generating-dataflow-pipeline": "build an evidence-grounded AI4S pipeline for papers, abstracts, scientific sections or research corpora from target + sample JSONL; ingest documents, extract structured records or claims, generate grounded QA, pick operators, or fix field mismatches",
+    "dataflow-dev": "work inside the DataFlow repo itself: add a scientific-text or general operator/pipeline/prompt, diagnose a DataFlow error, or review DataFlow code",
     "dataflow-operator-builder": "scaffold a new operator with registry registration, a CLI wrapper and tests",
     "prompt-template-builder": "write or rewrite a `prompt_template` class for an existing operator"
   },
