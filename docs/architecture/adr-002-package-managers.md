@@ -45,7 +45,7 @@ pass. It is currently a stale artifact, not an input.
 This decision is not finished until a lockfile npm actually reads exists:
 
 1. Generate `frontend/package-lock.json` on Linux
-2. Verify the frontend builds and the canvas works against it
+2. Verify the frontend builds and the operator result viewer works against it
 3. Delete `frontend/yarn.lock`
 4. Switch `build_release.sh` to `npm ci` unconditionally, and enable
    `cache: npm` with `cache-dependency-path: frontend/package-lock.json` in CI

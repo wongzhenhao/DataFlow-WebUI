@@ -1,13 +1,13 @@
 {
   "$comment": [
-    "Full stack: everything in the harness profile plus the Vue frontend.",
+    "Full stack: everything in the harness profile plus the Vue result viewer.",
     "This is the profile the old scripts/setup_all.sh used to install, minus the",
     "implicit user-directory writes, which are now a separate explicit command."
   ],
   "id": "webui",
-  "label": "Full WebUI + Harness",
-  "description": "The complete DataFlow-Harness stack: visual DAG canvas in the browser, FastAPI backend, MCP server, and all skills. Agent-built pipelines appear on the canvas.",
-  "audience": "Users who want the visual canvas and browser-based agent chat.",
+  "label": "Result Viewer + Harness",
+  "description": "The complete DataFlow-Harness stack: a read-only operator-result viewer in the browser, FastAPI backend, MCP server, and all skills. Pipeline construction and execution remain agent-driven.",
+  "audience": "Users who want domain experts to inspect pipeline execution history and every operator result in a browser.",
   "installs": [
     "Everything in the harness profile (Python packages via uv by default)",
     "Frontend Node dependencies and a production build (frontend/dist)"
@@ -59,9 +59,8 @@
     },
     {
       "id": "frontend-build",
-      "label": "Install frontend dependencies and build the canvas",
+      "label": "Install frontend dependencies and build the result viewer",
       "run": "df_build_frontend",
-      "skip_if": "test -f frontend/dist/index.html",
       "produces": "frontend/dist/"
     },
     {
@@ -126,7 +125,7 @@
   ],
   "next_steps": [
     "Start the backend: ./scripts/start.sh",
-    "Open the canvas: http://localhost:8000/",
+    "Open the operator result viewer: http://localhost:8000/",
     "Point an agent at it: ./install.sh configure-agent --agent claude"
   ]
 }

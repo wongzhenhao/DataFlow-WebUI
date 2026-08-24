@@ -172,7 +172,7 @@ def check_profile_content_boundaries(manifest: dict) -> None:
             "mcp": "yes",
         },
     )
-    for token in ("Serving Manager", "WebUI deployment context", "canvas"):
+    for token in ("Serving Manager", "WebUI deployment context", "Runtime credentials", "canvas"):
         if token.lower() in harness_output.lower():
             fail(f"generating-dataflow-pipeline: harness profile contains WebUI-only wording {token!r}")
 
@@ -184,7 +184,7 @@ def check_profile_content_boundaries(manifest: dict) -> None:
             "mcp": "yes",
         },
     )
-    for token in ("validate_pipeline_config", "WebUI Serving Manager"):
+    for token in ("validate_pipeline_config", "Runtime credentials"):
         if token not in webui_output:
             fail(f"generating-dataflow-pipeline: webui profile lost required wording {token!r}")
 

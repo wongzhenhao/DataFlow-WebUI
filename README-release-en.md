@@ -30,7 +30,13 @@ If uv is unavailable, use `python -m pip install -r requirements.txt` instead.
 The requirements intentionally pin `setuptools<82` (DataFlow still imports
 `pkg_resources`) and `mcp<2` (`fastapi-mcp==0.4.0` uses the MCP v1 Server API).
 
-Then open http://localhost:8000/
+Then open http://localhost:8000/ to inspect pipeline runs and per-operator results.
+Pipeline construction and execution are driven by an external MCP agent.
+
+Enter MinerU or LLM service keys in the local viewer's **Runtime credentials**
+panel. Keys stay only in the current backend process, are never returned or
+persisted, and must be entered again after a restart. Do not paste them into
+agent chat.
 
 Note: the server has no authentication, and running a pipeline is arbitrary code
 execution. It binds `127.0.0.1` by default — this machine only. To expose it on

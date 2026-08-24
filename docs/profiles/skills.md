@@ -16,7 +16,7 @@ quality gates — and you are happy running `python pipeline.py` yourself.
 
 ## What this is not for
 
-- Seeing pipelines as a graph → use [`webui`](webui.md)
+- Inspecting pipeline runs and per-operator results in a browser → use [`webui`](webui.md)
 - Letting the agent query your actual installed operator registry, validate a pipeline before committing, or execute it → use [`harness`](harness.md)
 
 The skills here carry a *bundled* operator reference. It is accurate for the DataFlow version it was written against, but it is a snapshot, not a live query.

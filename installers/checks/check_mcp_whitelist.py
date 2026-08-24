@@ -44,8 +44,6 @@ def declared_operation_ids(root: Path) -> dict[str, str]:
     """Map operation_id -> file:line for every route decorator in the tree."""
     out: dict[str, str] = {}
     files = list(root.rglob("*.py"))
-    # The MCP module registers a route of its own (render_pipeline_in_editor).
-    files.append(MCP_SERVER)
     for path in files:
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))

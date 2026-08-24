@@ -3,8 +3,8 @@
 English: **[README.md](README.md)**
 
 用 Coding Agent 构建、运行和管理偏 AI4S 的
-[DataFlow](https://github.com/OpenDCAI/DataFlow) 数据管线 —— 可以通过可视化画布、
-通过 MCP，或只用 skills。默认专注文本模态科学数据：论文、摘要、章节和科研语料，
+[DataFlow](https://github.com/OpenDCAI/DataFlow) 数据管线 —— 可以通过 MCP、
+浏览器结果查看器，或只用 skills。默认专注文本模态科学数据：论文、摘要、章节和科研语料，
 并在处理过程中保留证据与来源信息。
 
 ## 名称说明
@@ -13,7 +13,7 @@ English: **[README.md](README.md)**
 |---|---|
 | **DataFlow** | 上游数据处理框架（[OpenDCAI/DataFlow](https://github.com/OpenDCAI/DataFlow)），以 `open-dataflow` 包安装。不是本仓库。 |
 | **DataFlow-Harness** | 本仓库构建的偏 AI4S 系统：科学文本 workflow skills + MCP + WebUI 的整体。产品名，也是论文名。 |
-| **DataFlow-WebUI** | 仓库名，同时特指可视化画布这一层。为保持链接稳定而沿用。 |
+| **DataFlow-WebUI** | 仓库名，同时特指只读算子结果查看器这一层。为保持链接稳定而沿用。 |
 | **`DataFlow-WebUI-<版本>.zip`** | 预构建前端的发布包，无需 clone 即可运行。见 [docs/RELEASE-PACKAGE.md](docs/RELEASE-PACKAGE.md)。 |
 
 本仓库提供**三个相互独立的层**，按需安装其中一个即可。
@@ -28,20 +28,20 @@ English: **[README.md](README.md)**
 
 | | `webui` | `harness` | `skills` |
 |---|---|---|---|
-| **得到什么** | 可视化 DAG 画布 + 后端 + MCP | 后端 + MCP，无浏览器界面 | 仅 Agent skills |
+| **得到什么** | 算子结果查看器 + 后端 + MCP | 后端 + MCP，无浏览器界面 | 仅 Agent skills |
 | **需要什么** | Python 3.10+、Node 20+ | Python 3.10+ | Python 3.9+（仅用于生成技能文件） |
 | **是否装包** | 是（uv + npm） | 是（uv） | **否** |
 | **是否起服务** | 是，端口 8000 | 是，端口 8000 | **否** |
 | **Agent 能写管线** | ✅ | ✅ | ✅ |
 | **Agent 能查实时算子注册表** | ✅ | ✅ | ✗（用内置静态参考） |
-| **管线出现在画布上** | ✅ | ✗ | ✗ |
+| **执行结果出现在查看器中** | ✅ | ✗ | ✗ |
 | **安装耗时** | 几分钟 | 约 1 分钟 | 几秒 |
 
 `skills` 层不安装任何包，但需要运行一个 Python 脚本来生成技能文件，因此要求本机有 Python 3.9+。
 
 **30 秒决策：**
 
-- 想把管线当成图来**看和改** → **`webui`**
+- 想让领域专家在浏览器查看每个算子的输出 → **`webui`**
 - 全程在 Claude Code / Codex / Cursor 里操作，不开浏览器 → **`harness`**
 - 只想让 Agent 写出正确的 DataFlow 代码，不起服务 → **`skills`**
 
@@ -101,13 +101,14 @@ conda activate dataflow
 ./scripts/start.sh             # 或 ./scripts/start.sh --daemon
 ```
 
-浏览器打开 <http://localhost:8000/>，在聊天面板选择 Agent，描述想要的
-数据管线并在画布中检查结果。uv 是默认 Python 包管理器；若必须使用 pip，
+浏览器打开 <http://localhost:8000/> 查看执行历史和每个算子的输出。
+在 Codex、Claude Code 或 Cursor 客户端中描述、创建和运行管线；新任务会自动出现在查看器中。
+uv 是默认 Python 包管理器；若必须使用 pip，
 执行 `./install.sh --profile webui --pip`。
 
 ### 配置 AI Agent
 
-WebUI 的聊天工作流需要至少安装一个支持的 Agent，并单独配置 MCP 连接：
+管线工作流由浏览器外部的 Coding Agent 驱动。安装至少一个支持的 Agent，并单独配置 MCP 连接：
 
 ```bash
 # Claude Code
@@ -126,6 +127,12 @@ codex login                         # OAuth；或 export OPENAI_API_KEY=sk-...
 
 安装与 Agent 配置是两个独立步骤；安装器不会写入 API key。完整授权边界、
 配置命令和验证步骤见 [Agent 安装说明](docs/agents/SETUP.md)。
+
+### Pipeline 服务的运行凭证
+
+Agent 认证与 Pipeline 调用的服务凭证相互独立。在结果查看器的「运行凭证」
+面板中配置 MinerU 和 LLM Serving Key。Key 只保存在后端进程环境中，API 不会
+返回它，Registry 也不会落盘它；后端重启后需要重新填写。不要把服务 Key 粘贴到 Agent 对话中。
 
 ## 安装不会写入 Agent 配置
 
@@ -159,7 +166,7 @@ Codex 和 Cursor 没有全局安装方式，二者按目录生效，`--scope use
 
 ## DataFlow-Harness 是什么
 
-DataFlow-Harness 把三部分组合起来：**skills**（算子选择、字段衔接、装配顺序等流程性知识）、**MCP**（连接 Agent 与实时算子注册表和当前管线状态）、**WebUI**（把 Agent 构建的工作流变成可持久化、可编辑的 DAG）。
+DataFlow-Harness 把三部分组合起来：**skills**（算子选择、字段衔接、装配顺序等流程性知识）、**MCP**（连接 Agent 与实时算子注册表和当前管线状态）、**WebUI**（只读展示执行历史和每个算子的输出）。管线构建与执行由 Agent 负责。
 
 论文中报告：在 12 项数据工程基准上端到端通过率 93.3%，相比原生 Claude Code 成本降低 72.5%、生成延迟降低 49.9%。
 
@@ -169,11 +176,11 @@ DataFlow-Harness 把三部分组合起来：**skills**（算子选择、字段�
 
 | Agent | 使用方式 | MCP 配置位置 | 认证 |
 |---|---|---|---|
-| **Claude Code** | WebUI 调度，或在终端直接使用 | `.mcp.json`（项目级） | `ANTHROPIC_API_KEY`，或用 `ANTHROPIC_BASE_URL` 走中转 |
-| **Codex** | WebUI 调度，或在终端直接使用 | `~/.codex/config.toml` | `OPENAI_API_KEY`（可配 `OPENAI_BASE_URL`），或 `codex login` OAuth |
-| **Cursor** | 仅 IDE 模式 —— 不由 WebUI 调度 | `.cursor/mcp.json`（项目级） | Cursor 内置认证 |
+| **Claude Code** | 终端 / Coding Agent 客户端 | `.mcp.json`（项目级） | `ANTHROPIC_API_KEY`，或用 `ANTHROPIC_BASE_URL` 走中转 |
+| **Codex** | Codex 客户端 / 终端 | `~/.codex/config.toml` | `OPENAI_API_KEY`（可配 `OPENAI_BASE_URL`），或 `codex login` OAuth |
+| **Cursor** | Cursor IDE | `.cursor/mcp.json`（项目级） | Cursor 内置认证 |
 
-Cursor 的用法是在 IDE 中打开本项目，其 Agent 会自动发现 MCP server 并把管线推送到画布，不通过 WebUI 聊天面板调度。
+三种 Agent 都在浏览器之外工作。WebUI 不调度 Agent、不编辑 Pipeline，只展示任务和算子结果。
 
 ## 架构与决策记录
 
@@ -196,8 +203,8 @@ CI 会重新生成并比对，手工修改生成文件会导致构建失败。
 
 ## 引用
 
-如果使用了 DataFlow-Harness 平台、Agent 工作流、MCP 集成或可编辑管线
-界面，请引用 DataFlow-Harness 论文：
+如果使用了 DataFlow-Harness 平台、Agent 工作流、MCP 集成或算子结果
+查看器，请引用 DataFlow-Harness 论文：
 
 ```bibtex
 @article{he2026dataflow,

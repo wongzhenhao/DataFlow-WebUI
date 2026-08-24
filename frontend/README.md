@@ -1,295 +1,91 @@
 <p align="center">
-  <img src="src/assets/logo/logo.png" alt="Dataflow" width="120px"/>
+  <img src="src/assets/logo/logo.png" alt="DataFlow" width="120px"/>
 </p>
 
-# DataFlow WebUI
+# DataFlow Operator Result Viewer
 
-中文版本：[README_zh.md](docs/README_zh.md)
+Chinese version: [docs/README_zh.md](docs/README_zh.md)
 
-This is the **frontend interface** of DataFlow, built with **Vue 3 + Vite**.
-If you are not familiar with frontend development — no worries. Just follow the steps below **in order**.
+This Vue 3 + Vite frontend is intentionally read-only. A domain expert can:
 
----
+- select a pipeline execution;
+- inspect the ordered operator statuses;
+- compare an operator's input and output records;
+- download each step's JSONL result;
+- configure MinerU and LLM serving credentials for the current backend process.
 
-# 🧠 What You Are Setting Up (Big Picture)
+Pipeline creation, editing, validation and execution happen through Codex,
+Claude Code, Cursor or the backend API. The browser does not contain a chat
+panel, DAG editor or Run button.
 
-You are installing:
+## Requirements
 
-| Tool        | What it does            | Why you need it               |
-| ----------- | ----------------------- | ----------------------------- |
-| **Node.js** | Runs JavaScript tools   | Required to build the project |
-| **NVM**     | Manages Node versions   | Ensures correct Node version  |
-| **npm**     | Package manager         | Installs project dependencies (ships with Node.js) |
-| **Vite**    | Dev server & build tool | Runs the frontend locally     |
+- Node.js 20+
+- npm (the repository does not use Yarn)
+- the FastAPI backend running on `127.0.0.1:8000` for local development
 
----
+## Install and run
 
-# 🖥 0. Recommended Editor (Optional but helpful)
-
-Install:
-
-* **VS Code**: [https://code.visualstudio.com/](https://code.visualstudio.com/)
-* **Volar extension** (Vue support)
-* Disable **Vetur** if installed
-
----
-
-# 🧩 1. Install NVM (Node Version Manager)
-
-NVM lets you install the correct Node version easily.
-
-### Mac / Linux
-
-```bash
-# Official
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-
-# Faster mirror in China
-curl -so- https://gitee.com/mirrors/nvm/raw/v0.39.7/install.sh | bash
-```
-
-### Then refresh terminal
-
-```bash
-# bash
-source ~/.bashrc
-
-# zsh
-source ~/.zshrc
-```
-
----
-
-# 🟢 2. Install Node.js (Version 20)
-
-```bash
-nvm install 20
-nvm use 20
-nvm alias default 20
-```
-
-Check installation:
-
-```bash
-node -v   # should show v20.x.x
-npm -v
-```
-
----
-
-# 📦 3. Check npm
-
-npm installs all project packages and ships with Node.js — nothing extra to
-install.
-
-```bash
-npm -v
-```
-
-> This project uses **npm**, not Yarn. A stale `yarn.lock` is still tracked but
-> is not used by any build path — see
-> [docs/architecture/adr-002-package-managers.md](../docs/architecture/adr-002-package-managers.md).
-
----
-
-# 📥 4. Download Project & Install Dependencies
-
-Go to the project folder:
-
-```bash
-cd DataFlow-WebUI/frontend
-```
-
-Install everything the project needs:
+From `frontend/`:
 
 ```bash
 npm install
-```
-
-*(This may take a few minutes the first time.)*
-
----
-
-# 🔌 5. Connect to the Backend API
-
-The frontend talks to a backend server (FastAPI).
-
-Open:
-
-```
-vite.config.js
-```
-
-Find this section:
-
-```js
-server: {
-    host: '0.0.0.0',
-    proxy: {
-        '/api': {
-            target: 'http://100.64.0.91:8000/', // Backend address
-            changeOrigin: true,
-            rewrite: path => path.replace(/^\/api/, '')
-        }
-    }
-}
-```
-
-🔁 **Replace the IP address** with your backend server address if different.
-
----
-
-# ▶️ 6. Start Development Server
-
-Run:
-
-```bash
 npm run dev
 ```
 
-You should see something like:
+Open <http://localhost:5173/>. `vite.config.js` proxies `/api` and `/mcp` to
+`http://127.0.0.1:8000` without rewriting the path.
 
-```
-Local: http://localhost:5173/
-```
+For the normal full-stack installation, run this from the repository root
+instead:
 
-Open that link in your browser 🎉
-
-The page will auto-reload when you change code.
-
----
-
-# 🏗 7. Build for Production (Deployment)
-
-When you want to deploy:
-
-### Step 1: Set backend URL
-
-In `.env.production`:
-
-```
-VITE_BACKEND_URL=http://your-backend-address:8000
+```bash
+./install.sh --profile webui
+./scripts/start.sh
 ```
 
-### Step 2: Build
+The backend then serves the built viewer at <http://localhost:8000/>.
+
+## Runtime credentials
+
+The **Runtime credentials** panel accepts MinerU and API-serving keys over the
+local backend connection. Keys are write-only API inputs: the frontend clears
+the input after submission, the backend never returns the value, and registry
+files contain only serving metadata. Credentials live in the backend process
+environment and must be entered again after a restart.
+
+Do not put keys in source files, `.env` files, generated JSONL, or agent chats.
+
+## Production build
 
 ```bash
 npm run build
 ```
 
-A `dist/` folder will be generated.
-This folder is what you deploy to a server.
+The output is written to `frontend/dist/`. The root installer rebuilds this
+directory on every `webui` install so upgrades cannot keep a stale canvas build.
 
----
+## Relevant structure
 
-# 📂 Project Structure (Simplified)
-
-```
+```text
 src/
-├── axios/        → API request setup
-├── components/   → Reusable UI components
-├── views/        → Page-level components
-├── router/       → Page routing
-├── hooks/        → Shared logic
-├── App.vue       → Root component
-└── main.js       → App entry point
+├── views/review/index.vue        # execution and operator result viewer
+├── js/viewerI18n.js             # compact viewer translations
+├── axios/                       # generated and custom API access
+├── router/index.js              # viewer-only route
+├── App.vue
+└── main.js
 ```
 
----
+The active app exposes `$api` and `$axios` through the API plugin. Legacy canvas
+components remain in the source tree for now but are not routed or bundled into
+the production viewer.
 
-# 🔄 Update Backend API Automatically
+## Troubleshooting
 
-If backend API changes:
-
-In `package.json`:
-
-```json
-"api": "api-cli get http://100.64.0.91:8000/openapi.json -d ./src/axios"
-```
-
-Run:
-
-```bash
-npm run api
-```
-
-This regenerates API request code.
-
----
-
-# 📡 How Frontend Calls Backend API
-
-### Option 1 — In Vue Options API
-
-```js
-mounted() {
-    this.$api.datasets.list_datasets().then(res => {
-        console.log(res)
-    })
-}
-```
-
-### Option 2 — In Vue Composition API
-
-```js
-import { useGlobal } from "@/hooks/general/useGlobal";
-const { $api } = useGlobal();
-
-$api.datasets.list_datasets().then(res => {
-    console.log(res)
-});
-```
-
----
-
-# 🧰 Global Utilities Available
-
-| Name      | Function          |
-| --------- | ----------------- |
-| `$api`    | Backend API calls |
-| `$axios`  | Axios instance    |
-| `$router` | Vue router        |
-| `$Go`     | Navigate to page  |
-| `$Back`   | Go back           |
-| `$Jump`   | Open new page     |
-
----
-
-# 🎨 Flow Design Rule
-
-Edge format:
-
-```
-<property>::<source|target>::<edge_type>
-```
-
-Examples:
-
-```
-node::source::node
-key_name::source::run_key
-```
-
----
-
-# ✅ If Something Doesn’t Work
-
-Check:
-
-1. Node version = **v20**
-2. Backend server is running
-3. IP address in `vite.config.js` is correct
-4. Re-run:
-
-```bash
-rm -rf node_modules
-npm install
-```
-
-## 🔹 UI Component Library
-
-**English**
-
-This project uses **VFluent3**, a Vue 3 component library inspired by Microsoft’s Fluent Design. It provides a set of clean, consistent, and practical UI components that fit well with modern Vue + Vite workflows.
-
-GitHub: [https://github.com/Creator-SN/VFluent3](https://github.com/Creator-SN/VFluent3)
+| Symptom | Check |
+|---|---|
+| Viewer cannot load executions | Backend is running and `/api/v1/tasks/executions` is reachable |
+| Runtime credential count resets | Expected after a backend restart; enter the keys again |
+| A completed step shows no preview | Use Download; the viewer falls back to the task-specific JSONL result |
+| Production page is stale | Re-run `./install.sh --profile webui` or `npm run build` |

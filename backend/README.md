@@ -8,7 +8,7 @@ also handles the DataFlow framework, the core data directory and skills:
 
 ```bash
 ./install.sh --profile harness    # backend + MCP, no frontend
-./install.sh --profile webui      # the above plus the canvas
+./install.sh --profile webui      # the above plus the result viewer
 ```
 
 See [docs/profiles/harness.md](../docs/profiles/harness.md).
@@ -48,7 +48,7 @@ uvicorn app.main:app --reload --port 8000 --reload-dir app --host=0.0.0.0
 | MCP (SSE) | `http://localhost:8000/mcp` |
 
 Without a frontend build, startup logs a warning about a missing UI index and no
-canvas is served. That is expected for the `harness` profile.
+result viewer is served. That is expected for the `harness` profile.
 
 There is **no authentication**, and the default host `0.0.0.0` exposes the API to
 your local network. Use `--host=127.0.0.1` to restrict it.

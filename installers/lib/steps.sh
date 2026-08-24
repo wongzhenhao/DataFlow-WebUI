@@ -411,7 +411,7 @@ df_verify_frontend_dist() {
     return 0
   fi
   [[ -f "$DF_REPO_ROOT/frontend/dist/index.html" ]] || {
-    err "frontend/dist/index.html missing — the canvas will not load"
+    err "frontend/dist/index.html missing — the result viewer will not load"
     return 1
   }
 }

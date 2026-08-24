@@ -24,7 +24,7 @@ This is a real product layer, not "webui with the frontend deleted". It installs
 
 ## What this is not for
 
-- A visual DAG you can drag around → use [`webui`](webui.md)
+- A browser view of execution and per-operator results → use [`webui`](webui.md)
 - Avoiding a running server entirely → use [`skills`](skills.md)
 
 ## Prerequisites
@@ -70,7 +70,9 @@ changed.
 
 Defaults come from `installers/config.sh`: host `0.0.0.0`, port `8000`, MCP at `/mcp`. Override with `DATAFLOW_HOST`, `DATAFLOW_PORT`.
 
-Opening `http://localhost:8000/` in this profile logs a warning about a missing UI index and serves no canvas. That is expected — the API and MCP endpoint are what this profile provides.
+Opening `http://localhost:8000/` in this profile logs a warning about a missing
+UI index and serves no result viewer. That is expected — the API and MCP
+endpoint are what this profile provides.
 
 ### Runtime surface
 
@@ -83,6 +85,17 @@ Opening `http://localhost:8000/` in this profile logs a warning about a missing 
 | Cache | `backend/cache_local/` (pipeline execution scratch) |
 
 There is **no authentication**. This is a single-user, local-first tool: binding to `0.0.0.0` exposes the API to your whole network, so keep it on a trusted network or set `DATAFLOW_HOST=127.0.0.1`.
+
+### Runtime credentials without the WebUI
+
+Agent authentication is separate from the credentials used by pipeline
+operators. MinerU reads `MINERU_API_KEY`; an existing API serving reads
+`DF_API_KEY_<serving_id>`. Export them in the shell that starts the backend, or
+use the local `/api/v1/runtime-credentials/...` endpoints documented at
+`http://localhost:8000/docs`. Runtime credential values are held only in the
+backend process environment, are never returned or written to registry files,
+and disappear on restart. Do not put a key in a command argument, repository
+file or agent conversation.
 
 ## Connect an agent
 

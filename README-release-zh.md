@@ -26,7 +26,12 @@ cd backend && uv pip install -r requirements.txt && cd ..
 固定了 `setuptools<82`（DataFlow 仍使用 `pkg_resources`）和 `mcp<2`
 （`fastapi-mcp==0.4.0` 使用 MCP v1 的 Server API）。
 
-然后浏览器打开 http://localhost:8000/
+然后浏览器打开 http://localhost:8000/，查看 Pipeline 运行记录和每个算子的结果。
+Pipeline 的创建与执行由外部 MCP Agent 完成。
+
+MinerU 或 LLM 服务的密钥请在本机查看器的“运行凭证”面板填写。密钥只保留在
+当前后端进程中，不会通过 API 返回或持久化，后端重启后需要重新填写。不要把
+密钥粘贴到 Agent 对话中。
 
 注意：服务不带任何认证，且执行 pipeline 等同于任意代码执行。默认只监听 `127.0.0.1`（仅本机）。
 如需局域网访问，需显式指定 `DATAFLOW_HOST=0.0.0.0 ./run.sh`。

@@ -6,7 +6,7 @@
 中文文档：**[README_zh.md](README_zh.md)**
 
 Build, run and manage AI4S-oriented [DataFlow](https://github.com/OpenDCAI/DataFlow)
-pipelines with a coding agent — through a visual canvas, through MCP, or with
+pipelines with a coding agent — through MCP, with a browser result viewer, or with
 skills alone. The default specialization is text-modal scientific data: papers,
 abstracts, sections, and research corpora with evidence and provenance retained.
 
@@ -16,7 +16,7 @@ abstracts, sections, and research corpora with evidence and provenance retained.
 |---|---|
 | **DataFlow** | The upstream data-processing framework ([OpenDCAI/DataFlow](https://github.com/OpenDCAI/DataFlow)). Installed as the `open-dataflow` package. Not this repo. |
 | **DataFlow-Harness** | The AI4S-oriented system this repo builds: scientific-text workflow skills + MCP + WebUI working together. The name of the product, and of the paper. |
-| **DataFlow-WebUI** | The repository name, and the visual-canvas layer specifically. Kept for URL stability. |
+| **DataFlow-WebUI** | The repository name, and the read-only operator-result viewer specifically. Kept for URL stability. |
 | **`DataFlow-WebUI-<version>.zip`** | A release package with the frontend pre-built, for running without a clone. See [docs/RELEASE-PACKAGE.md](docs/RELEASE-PACKAGE.md). |
 
 This repo ships **three independent layers**. Install only the one you need.
@@ -33,13 +33,13 @@ general text fallback.
 
 | | `webui` | `harness` | `skills` |
 |---|---|---|---|
-| **You get** | Visual DAG canvas + backend + MCP | Backend + MCP, no browser UI | Agent skills only |
+| **You get** | Operator-result viewer + backend + MCP | Backend + MCP, no browser UI | Agent skills only |
 | **You need** | Python 3.10+, Node 20+ | Python 3.10+ | Python 3.9+ (to render the skills) |
 | **Installs packages** | yes (uv + npm) | yes (uv) | **no** |
 | **Runs a server** | yes, port 8000 | yes, port 8000 | **no** |
 | **Agent writes pipelines** | ✅ | ✅ | ✅ |
 | **Agent sees live operator registry** | ✅ | ✅ | ✗ (uses bundled reference) |
-| **Pipelines appear on a canvas** | ✅ | ✗ | ✗ |
+| **Execution results appear in a viewer** | ✅ | ✗ | ✗ |
 | **Install time** | minutes | ~1 min | seconds |
 
 The `skills` profile installs no packages, but it does run a Python script to
@@ -47,7 +47,7 @@ render the skill files, so Python 3.9+ must be present.
 
 **30-second decision:**
 
-- You want to *see and edit* pipelines as a graph → **`webui`**
+- You want domain experts to inspect each operator's output in a browser → **`webui`**
 - You drive everything from Claude Code / Codex / Cursor and never open a browser → **`harness`**
 - You just want your agent to write correct DataFlow code, with no server → **`skills`**
 
@@ -128,8 +128,9 @@ PowerShell; `.sh` files do not run in plain `cmd.exe`.
 # or: ./scripts/start.sh --daemon
 ```
 
-Open <http://localhost:8000/>. In the chat panel select an installed agent,
-describe the pipeline you want, and inspect the resulting DAG on the canvas.
+Open <http://localhost:8000/> to inspect execution history and each operator's
+output. Describe, create and run pipelines from Codex, Claude Code or Cursor;
+the viewer refreshes automatically when a task is submitted.
 Check or stop a background server with `./scripts/start.sh --status` and
 `./scripts/start.sh --stop`.
 
@@ -139,8 +140,8 @@ use `./install.sh --profile webui --pip` (or the compatibility
 
 ### Configure an AI agent
 
-The WebUI chat workflow requires at least one supported agent. Install and
-authenticate an agent, then explicitly configure its MCP connection:
+The workflow is driven from a supported coding agent outside the browser.
+Install and authenticate an agent, then explicitly configure its MCP connection:
 
 ```bash
 # Claude Code
@@ -160,6 +161,14 @@ codex login                         # OAuth, or export OPENAI_API_KEY=sk-...
 Agent configuration is intentionally a separate step from installation. The
 installer does not write API keys. See [Agent setup](docs/agents/SETUP.md) for
 the exact authorization boundaries and verification steps.
+
+### Runtime credentials for pipeline services
+
+Agent authentication and pipeline-service credentials are separate. Open the
+**Runtime credentials** panel in the result viewer to configure MinerU and LLM
+serving keys. Keys are kept only in the backend process environment, are never
+returned by the API or written to registry files, and must be entered again
+after the backend restarts. Do not paste service keys into an agent chat.
 
 ## Installing never writes agent configuration
 
@@ -198,23 +207,17 @@ Upgrading from `scripts/setup_all.sh`? See [docs/migration/from-setup-scripts.md
 
 ## What DataFlow-Harness is
 
-DataFlow-Harness combines **skills** (procedural knowledge about operator selection, schema links and assembly order), **MCP** (a live connection to the operator registry and current pipeline state), and the **WebUI** (turning agent-built workflows into persistent, editable DAGs).
-
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/c54d92ea-a6d5-4c3c-8144-87c3cdfee276" alt="DataFlow-WebUI" width="90%">
-</p>
-
-*The dual-modality interface: conversational agent and visual DAG editor stay in sync.*
+DataFlow-Harness combines **skills** (procedural knowledge about operator selection, schema links and assembly order), **MCP** (a live connection to the operator registry and current pipeline state), and the **WebUI** (a read-only view of execution history and per-operator outputs). Pipeline construction and execution remain agent-driven.
 
 <p align="center">
   <img width="1280" height="638" alt="DataFlow-Harness architecture" src="https://github.com/user-attachments/assets/d9c862ac-a1a2-42b1-9f07-440d20d59d8f" />
 </p>
 
-*A shared pipeline representation synchronized across the agent runtime and the WebUI. Skills guide construction; the validation engine checks DAG structure and schema compatibility.*
+*Skills guide construction; MCP exposes the live registry and execution surface; the validation engine checks structure and schema compatibility; the WebUI presents results.*
 
 ### Why it helps
 
-**Bridges the NL2Pipeline gap.** Natural-language intent becomes a persistent, platform-native pipeline artifact you can inspect, edit, run and reuse.
+**Bridges the NL2Pipeline gap.** Natural-language intent becomes a persistent, platform-native pipeline artifact that an agent can validate, run and reuse while domain experts inspect its outputs.
 
 **Procedural knowledge, not just tool lists.** Building a VQA dataset from textbooks needs PDF parsing, layout understanding, OCR, image-text alignment, QA extraction and quality filtering *in the right order*. That ordering knowledge is what the skills encode.
 
@@ -233,11 +236,11 @@ installing this repo. Details and methodology: [DataFlow-Harness](https://huggin
 
 | Agent | Mode | MCP config | Auth |
 |---|---|---|---|
-| **Claude Code** | WebUI-dispatched, or in your terminal | `.mcp.json` (project) | `ANTHROPIC_API_KEY`, or `ANTHROPIC_BASE_URL` for a gateway |
-| **Codex** | WebUI-dispatched, or in your terminal | `~/.codex/config.toml` | `OPENAI_API_KEY` (+ optional `OPENAI_BASE_URL`), or `codex login` OAuth |
-| **Cursor** | IDE only — not dispatched by the WebUI | `.cursor/mcp.json` (project) | Cursor built-in |
+| **Claude Code** | Terminal / coding-agent client | `.mcp.json` (project) | `ANTHROPIC_API_KEY`, or `ANTHROPIC_BASE_URL` for a gateway |
+| **Codex** | Codex client / terminal | `~/.codex/config.toml` | `OPENAI_API_KEY` (+ optional `OPENAI_BASE_URL`), or `codex login` OAuth |
+| **Cursor** | Cursor IDE | `.cursor/mcp.json` (project) | Cursor built-in |
 
-Cursor is used by opening this project in the IDE; its agent discovers the MCP server and pushes pipelines onto the canvas. It is not driven from the WebUI chat panel.
+All three agents operate outside the browser. The WebUI does not dispatch agents or edit pipelines; it displays task and operator results.
 
 ## Architecture and decisions
 

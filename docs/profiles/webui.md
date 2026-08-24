@@ -1,6 +1,7 @@
 # Profile: `webui`
 
-The complete stack: visual DAG canvas, FastAPI backend, MCP server, all skills.
+The complete stack: read-only operator-result viewer, FastAPI backend, MCP
+server, and all skills.
 
 ```bash
 ./install.sh --profile webui
@@ -8,7 +9,9 @@ The complete stack: visual DAG canvas, FastAPI backend, MCP server, all skills.
 
 ## What this is for
 
-You want to see pipelines as a graph, edit them by hand, and chat with an agent in the browser — with the canvas and the conversation staying in sync.
+You want domain experts to open a browser, select an execution, and inspect the
+ordered operators plus each step's records. Pipeline construction and execution
+happen in Codex, Claude Code or Cursor rather than in the browser.
 
 ## What this is not for
 
@@ -20,7 +23,7 @@ You want to see pipelines as a graph, edit them by hand, and chat with an agent 
 - Python 3.10+ (3.10 recommended) in an activated venv or conda environment
 - uv (the default Python package installer; use `--pip` as a fallback)
 - Node.js 20+ with npm (recommended: [nvm](https://github.com/nvm-sh/nvm) — `nvm install 20`)
-- At least one agent CLI, if you want the chat panel:
+- At least one coding-agent client to construct or execute pipelines:
   - Claude Code: `curl -fsSL https://claude.ai/code/install.sh | sh`
   - Codex: `npm i -g @openai/codex`
   - Cursor: [download the IDE](https://cursor.com)
@@ -43,9 +46,10 @@ DATAFLOW_PYTHON="$(command -v python3.10)" ./install.sh --profile webui
 ./install.sh --profile webui --pip
 ```
 
-Steps: install `open-dataflow` with uv → backend deps → `npm install` + `npm run build` → initialize the DataFlow core directory → render and install all skills. Pass `--pip` to use pip explicitly.
-
-The frontend build is the slow part. It is skipped when `frontend/dist/index.html` already exists; delete that file to force a rebuild.
+Steps: install `open-dataflow` with uv → backend deps → `npm install` +
+`npm run build` → initialize the DataFlow core directory → render and
+install all skills. Pass `--pip` to use pip explicitly. The frontend is rebuilt
+on every WebUI install so a previous canvas build cannot survive an upgrade.
 
 ## Run
 
@@ -56,7 +60,8 @@ The frontend build is the slow part. It is skipped when `frontend/dist/index.htm
 ./scripts/start.sh --stop
 ```
 
-Then open **http://localhost:8000/**. The backend serves both the canvas and the MCP endpoint. If you changed `DATAFLOW_PORT`, use that port.
+Then open **http://localhost:8000/**. The backend serves both the result viewer
+and the MCP endpoint. If you changed `DATAFLOW_PORT`, use that port.
 
 There is **no authentication** — single-user local tool. `0.0.0.0` exposes it to your network; use `DATAFLOW_HOST=127.0.0.1` to keep it local.
 
@@ -92,26 +97,38 @@ export OPENAI_BASE_URL=https://gateway/v1    # optional gateway
 codex login                                  # Codex, OAuth mode (no key)
 ```
 
-Export these in the shell that starts the backend — that is the environment the dispatched agent inherits. The installer never stores credentials.
+Export agent credentials in the shell that starts the agent client. The
+installer never stores them.
 
-### Two usage modes
+### Pipeline-service credentials
 
-**WebUI-dispatched** (Claude Code, Codex): the backend spawns the CLI headlessly when you chat in the browser. Pick the agent from the dropdown beside the chat title; switching starts a fresh session, and your choice persists across reloads.
+MinerU and LLM serving keys are separate from agent authentication. Use the
+viewer's **Runtime credentials** panel to create serving metadata and enter the
+required keys. They are held only in the backend process environment, never
+returned or persisted, and must be entered again after a backend restart.
+Never paste them into an agent conversation.
 
-**IDE-driven** (Cursor, or Claude Code in your terminal): you talk to the agent in your own environment and it pushes pipelines onto the canvas via MCP. Cursor also needs a one-time toggle: Settings → Features → MCP Servers → enable `dataflow`.
+### Usage flow
+
+1. Start the backend and open the result viewer.
+2. Use Codex, Claude Code or Cursor to create and validate a pipeline through MCP.
+3. Ask the agent to execute only when you intend to run it.
+4. Select the new task in the viewer; it refreshes automatically and exposes
+   each operator's output and downloads.
 
 ## Minimal verification
 
 1. `./scripts/start.sh --status` reports running
-2. `http://localhost:8000/` shows the canvas
-3. In the chat panel: *"list the available operator categories"* — expect `core_text`, `general_text`, `reasoning`, …
-4. Ask it to build a small pipeline; nodes should appear on the canvas
+2. `http://localhost:8000/` shows **Operator Result Viewer**
+3. Ask the external agent to list operator categories through MCP — expect
+   `core_text`, `general_text`, `reasoning`, …
+4. Run a small pipeline explicitly; a task and its operator results should
+   appear in the viewer
 
 ## Upgrade
 
 ```bash
 git pull
-rm -f frontend/dist/index.html      # force a frontend rebuild
 ./install.sh --profile webui
 ./scripts/start.sh --stop && ./scripts/start.sh --daemon
 ```
@@ -130,11 +147,9 @@ Python packages and your pipelines under `backend/data/` are left alone.
 | Symptom | Cause | Fix |
 |---|---|---|
 | "UI index file not found" in logs | Frontend not built | `cd frontend && npm install && npm run build` |
-| Blank page at `:8000` | Stale or partial build | Delete `frontend/dist`, rebuild |
+| Blank page at `:8000` | Partial frontend build | Delete `frontend/dist`, re-run the WebUI install |
 | `DataFlow core is incomplete` | A prior initialization failed partway through | Move the incomplete `backend/data/dataflow_core/` aside, then re-run the install |
-| `<cli>: command not found` in backend logs | Agent CLI not on the backend's PATH | Set `DATAFLOW_CLAUDE_CLI` / `DATAFLOW_CODEX_CLI` to an absolute path before starting |
-| Chat replies empty, immediate `done` | Agent auth failed | Confirm the key is exported in the shell that started the backend; for Codex try `codex login` |
 | Agent invents operators | Skill not loaded | Re-run `./install.sh --profile webui --force` |
 | `lang="zh"` yields 0 rows on English data | Stale skill | Same as above — the skill encodes the language-detection policy |
 | Cursor sees no MCP tools | Not enabled in IDE, or backend down | Enable in Settings; check `./scripts/start.sh --status` |
-| Pipeline nodes stack on one another | Old layout code | Fixed on `main`; ensure you are current |
+| Pipeline validation warns `serving_credential_not_configured` | Runtime key is absent after a fresh start | Open **Runtime credentials**, enter the key locally, then retry |

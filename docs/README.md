@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| [profiles/webui.md](profiles/webui.md) | Full stack: canvas + backend + MCP |
+| [profiles/webui.md](profiles/webui.md) | Full stack: result viewer + backend + MCP |
 | [profiles/harness.md](profiles/harness.md) | Backend + MCP, no Node.js |
 | [profiles/skills.md](profiles/skills.md) | Agent skills only, installs no packages |
 

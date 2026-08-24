@@ -221,11 +221,11 @@ Before generating pipeline code, confirm serving configuration for every LLM/VLM
 <!-- @if profile==webui -->
 **WebUI deployment context**:
 
-When the pipeline is intended for WebUI execution (not local `python pipeline.py`), the serving must also be registered in the WebUI Serving Manager. After generating code, remind the user:
-- Use the WebUI Serving Manager to create a serving with the correct `api_url`, `model_name`, and `api_key`
-- In the WebUI pipeline editor, assign the serving to **ALL** LLM-dependent operators (not just the first one)
-- Common failure: only the first operator gets a serving assigned; the rest remain empty, causing `Failed to process parameter: llm_serving` errors at execution time
-- In WebUI/MCP mode, older prompts may still say `list_servings`; the backend now provides both `list_serving` and a backward-compatible alias, but prefer `list_serving` in new prompts/skills
+When the pipeline is intended for backend execution (not local `python pipeline.py`), remind the user:
+- Register serving metadata with the backend and enter its key in the local result viewer's **Runtime credentials** panel; the key is process-memory only and must be re-entered after restart
+- Assign that serving id to **ALL** LLM-dependent operators in the MCP pipeline config, then call `validate_pipeline_config`
+- Check `credential_configured` before an explicitly requested run; never ask for or echo the key in chat
+- The viewer is read-only: report the pipeline id and operator chain, and explain that step results appear there after execution
 <!-- @endif -->
 
 <!-- @if mcp==yes -->
@@ -355,10 +355,9 @@ The key is **read from the environment at run time and never written anywhere**.
   )
   ```
 <!-- @if profile==webui -->
-- **WebUI deployment**: The API key is managed by the WebUI Serving Manager — users input it
-  in the `api_key` field when creating/editing a serving. The WebUI backend injects it into the
-  environment at execution time. Do NOT include `api_key` or `key_name_of_api_key` in
-  `operators.json` — the engine handles this via the serving config.
+- **WebUI deployment**: Users enter the API key in the local result viewer's **Runtime
+  credentials** panel. The backend keeps it only for the current process and injects it at
+  execution time. Do NOT include `api_key` or `key_name_of_api_key` in `operators.json`.
 <!-- @endif -->
 
 ### Six Core Operators: Signatures + Key Requirements

@@ -8,7 +8,7 @@ A NormalizedEvent is one of:
     {"type": "error", "message": "..."}             — adapter-level failure
     {"type": "done"}                                — turn complete
 
-The endpoint forwards each of these to the frontend verbatim.
+The compatibility WebSocket endpoint forwards each event to its client verbatim.
 """
 from __future__ import annotations
 
@@ -19,14 +19,12 @@ from typing import Any, AsyncGenerator, Optional
 
 NormalizedEvent = dict[str, Any]
 
-# Code agents that the WebUI backend dispatches headless via subprocess.
+# Code agents exposed by the compatibility WebSocket API for headless dispatch.
 # Cursor is intentionally NOT in this list: Cursor's intended use is in the
-# Cursor IDE itself, where the user's existing Cursor session connects to
-# DataFlow via MCP (`.cursor/mcp.json`) and renders pipelines back into the
-# WebUI through `mcp__dataflow__render_pipeline_in_editor`. There is no
-# value in re-spawning `cursor-agent` as a headless subprocess from the
-# backend. The CursorAdapter class is retained for parity / experimental use
-# but the factory does not expose it.
+# Cursor IDE itself, where the user's existing session connects to DataFlow via
+# MCP (`.cursor/mcp.json`). There is no value in re-spawning `cursor-agent` as a
+# headless subprocess from the backend. The CursorAdapter class is retained for
+# parity / experimental use but the factory does not expose it.
 AGENT_KINDS = ("claude", "codex")
 DEFAULT_AGENT = "claude"
 

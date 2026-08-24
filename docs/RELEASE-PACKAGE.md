@@ -49,7 +49,12 @@ cd ..
 ./run.sh        # Windows: run.bat
 ```
 
-浏览器打开 http://localhost:8000/
+浏览器打开 http://localhost:8000/，查看 Pipeline 运行记录和每个算子的结果。
+Pipeline 的创建与执行由外部 MCP Agent 完成。
+
+MinerU 或 LLM 服务密钥请在本机查看器的“运行凭证”面板填写。密钥只保留在
+当前后端进程中，不会通过 API 返回或持久化，后端重启后需要重新填写。不要把
+密钥粘贴到 Agent 对话中。
 
 ### 4. 连接 Agent（可选）
 
@@ -109,7 +114,13 @@ From the **release root directory**:
 ./run.sh        # Windows: run.bat
 ```
 
-Open http://localhost:8000/
+Open http://localhost:8000/ to inspect pipeline runs and per-operator results.
+Pipeline construction and execution are driven by an external MCP agent.
+
+Enter MinerU or LLM service keys in the local viewer's **Runtime credentials**
+panel. Keys stay only in the current backend process, are never returned or
+persisted, and must be entered again after a restart. Do not paste them into
+agent chat.
 
 ### 4. Connect an agent (optional)
 

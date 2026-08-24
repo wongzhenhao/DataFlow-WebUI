@@ -18,7 +18,7 @@ already clear from the conversation:
 |---|---|---|
 | `skills` | They want you to write DataFlow code; no server needed | seconds, installs no packages |
 | `harness` | They want you to query the live operator registry and run pipelines via MCP, no browser | ~1 min, pip only |
-| `webui` | They want a visual DAG canvas in the browser | minutes, pip + npm |
+| `webui` | Domain experts need a browser view of executions and per-operator results | minutes, pip + npm |
 
 If the user says only "set up DataFlow" and gives no other signal, ask. The three
 differ by orders of magnitude in install cost and in what they change.
@@ -76,6 +76,10 @@ Rules you must follow:
   variables at run time. If auth is missing, tell the user which variable to
   export — do not ask them to paste a key into the chat, and do not put one in a
   file.
+- Pipeline-service keys are a separate local runtime concern. For the `webui`
+  profile, direct the user to the **Runtime credentials** panel; for `harness`,
+  direct them to an environment variable or the local credential endpoint. The
+  backend keeps these values in process memory only, so a restart clears them.
 
 ## 5. Start the service (harness / webui only)
 
@@ -93,7 +97,7 @@ authentication**. On an untrusted network, suggest `DATAFLOW_HOST=127.0.0.1`.
 |---|---|
 | `skills` | `ls .claude/skills/generating-dataflow-pipeline/SKILL.md` succeeds (or `~/.claude/skills/...` if you used `--scope user`) |
 | `harness` | `curl -sf http://localhost:8000/api/v1/operators/categories` returns categories |
-| `webui` | The above, plus `http://localhost:8000/` serves the canvas |
+| `webui` | The above, plus `http://localhost:8000/` serves the Operator Result Viewer |
 
 Then one real MCP call, for `harness` / `webui`:
 

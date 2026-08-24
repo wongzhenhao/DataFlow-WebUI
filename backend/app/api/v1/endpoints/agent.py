@@ -1,9 +1,9 @@
 """
-WebSocket 端点：前端 ChatPanel 通过此端点与 Agent 进行实时对话。
+兼容的 Agent WebSocket 端点；当前只读结果查看器不使用此接口。
 
 连接 URL：ws://localhost:8000/api/v1/agent/ws?user_id=<your_user_id>&agent=<claude|cursor|codex>
 
-消息协议（前端 → 后端）：
+消息协议（兼容客户端 → 后端）：
   { "type": "chat", "message": "用户输入", "agent": "claude" }
   { "type": "abort_session" }        ← 终止正在运行的 Agent 进程并清除当前会话（保留历史）
   { "type": "clear_session" }        ← 脱离当前会话（不 kill 进程），等价于"新建一个对话"
@@ -11,15 +11,13 @@ WebSocket 端点：前端 ChatPanel 通过此端点与 Agent 进行实时对话�
   { "type": "switch_session",        ← 切换到一条历史会话，下一轮对话继续它
     "session_id": "..." }
 
-消息协议（后端 → 前端）：
+消息协议（后端 → 兼容客户端）：
   { "type": "text_chunk", "content": "..." }       ← Agent 回复文本（流式）
   { "type": "tool_call_start", "tool_use_id": "...",
     "name": "mcp__dataflow__list_operators",
     "input_preview": "{ ... }" }                    ← Agent 开始调用某个工具
   { "type": "tool_call_end", "tool_use_id": "...",
     "is_error": false, "output_preview": "..." }    ← 工具调用完成
-  { "type": "sync_pipeline", "pipeline": {...},
-    "nodes": [...], "edges": [...] }                ← Pipeline 同步到 DAG 编辑器
   { "type": "done" }                               ← 本轮回复完成
   { "type": "session_aborted" }                    ← 会话已终止并清除
   { "type": "session_cleared" }                    ← 会话已清除（新对话，保留历史）
@@ -28,7 +26,7 @@ WebSocket 端点：前端 ChatPanel 通过此端点与 Agent 进行实时对话�
   { "type": "error", "message": "..." }            ← 错误信息
 
 后端到 Adapter 的事件已由 ``app.services.agents`` 内的具体 Adapter 归一化，
-本端点只负责把这些归一化事件透传给前端。
+本端点只负责把这些归一化事件透传给兼容客户端。
 """
 import asyncio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
@@ -44,7 +42,7 @@ logger = get_logger(__name__)
 
 router = APIRouter(tags=["agent"])
 
-# 全局 WebSocket 管理器（单例，MCP render_pipeline_in_editor 工具也会用到）
+# 全局 WebSocket 管理器（供兼容的 Agent WebSocket API 使用）
 class WebSocketManager:
     """管理所有活跃的 WebSocket 连接，支持定向发送和全局广播"""
 
@@ -70,7 +68,7 @@ class WebSocketManager:
                 logger.warning(f"Failed to send to user {user_id}: {e}")
 
     async def broadcast(self, data: dict):
-        """向所有已连接用户广播（供 render_pipeline_in_editor MCP 工具调用）"""
+        """向所有已连接用户广播兼容事件。"""
         disconnected = []
         for uid, ws in self._connections.items():
             try:
@@ -86,7 +84,7 @@ class WebSocketManager:
         return len(self._connections)
 
 
-# 全局单例（在 mcp_server.py 中的 render_pipeline_in_editor 工具需要导入此实例）
+# 全局单例
 ws_manager = WebSocketManager()
 
 # Agent 会话管理器

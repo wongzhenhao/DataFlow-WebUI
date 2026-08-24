@@ -235,7 +235,7 @@ fi
 # ---------- profile resolution ----------------------------------------------
 if [[ -z "$DF_PROFILE" ]]; then
   err "no profile given. Pick one:"
-  err "  --profile webui     full canvas + backend + MCP"
+  err "  --profile webui     result viewer + backend + MCP"
   err "  --profile harness   backend + MCP only (no Node)"
   err "  --profile skills    standalone skills only (no packages)"
   err ""

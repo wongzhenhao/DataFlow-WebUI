@@ -4,7 +4,7 @@
 
 ```
 ┌─────────────────────────────────────────────┐
-│ frontend/          Vue 3 + Vite canvas      │  webui profile only
+│ frontend/      Vue 3 + Vite result viewer  │  webui profile only
 └───────────────┬─────────────────────────────┘
                 │ HTTP /api/v1 only
 ┌───────────────▼─────────────────────────────┐
@@ -29,8 +29,9 @@ depend on nothing at build time; at run time the MCP-aware ones need the backend
 ## Rules
 
 **The frontend talks to the backend only over `/api/v1`.** It must not read
-operator internals or reach into DataFlow directly. The canvas and an agent both
-being able to mutate a pipeline is why a single server-side representation exists.
+operator internals or reach into DataFlow directly. It is a read-only consumer
+of pipeline execution state; pipeline creation, validation and execution happen
+through the backend API or MCP.
 
 **MCP tools are a whitelist, not "every route".** `backend/app/mcp_server.py`
 names the `operation_id`s it exposes. Adding a route does not expose it; renaming
@@ -57,7 +58,8 @@ Node.js present; `skills` must install no packages at all.
 | Backend runtime paths | `backend/app/core/config.py` | Registry files, cache, `ops.json` |
 | Project agent config | `.mcp.json`, `.cursor/`, `.codex/` | Written by `configure-agent`, default scope |
 | User agent config | `~/.codex/config.toml`, `~/.cursor/mcp.json` | Only with `--scope user`, after a diff |
-| Credentials | environment variables | Never written to disk by anything here |
+| Agent credentials | the agent client's environment / OAuth store | Never handled by the installer |
+| Pipeline-service credentials | backend process environment, set before start or through the local Runtime credentials API | Never returned or written to registry files; cleared on restart |
 | Runtime data | `backend/data/`, `backend/cache_local/` | Gitignored; never deleted by uninstall |
 
 ## Security posture

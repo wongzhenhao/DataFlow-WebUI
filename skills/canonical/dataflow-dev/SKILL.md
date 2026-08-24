@@ -151,10 +151,11 @@ if TYPE_CHECKING:
 
 <!-- @if profile==webui -->
 **WebUI 部署场景额外提醒**：
-- 在 WebUI Serving Manager 中创建 serving（填入 api_url + model_name + api_key）
-- 在 WebUI Pipeline 编辑器中，为**每个** LLM 算子分配 serving（不能只设置第一个）
-- 已知问题：AST 解析器无法解析 `self.llm_serving` 引用，导致导入的 Pipeline 中所有算子的
-  `llm_serving` 参数为空，必须在 WebUI 中手动逐个分配
+- 在后端注册 serving 元数据，并由用户在本机结果查看器的“运行凭证”面板填写 API key；
+  凭证只保存在当前后端进程中，重启后需要重新填写
+- 在 MCP Pipeline 配置中，为**每个** LLM 算子分配 serving id，并在执行前调用
+  `validate_pipeline_config`、确认 `credential_configured`
+- 前端是只读结果查看器；报告 Pipeline id 和算子链，执行后由查看器展示每步结果
 <!-- @endif -->
 
 ### Step 2: 算子选择策略
@@ -209,7 +210,7 @@ if TYPE_CHECKING:
 | `ModuleNotFoundError` + `dataflow.operators.reasoning.refine` | Issue（LazyLoader 路径，应从父模块 import）|
 | `AttributeError: 'NoneType' object has no attribute 'strip'` + `re.split` | Issue #006（re.split 捕获组 None 问题）|
 <!-- @if profile==webui -->
-| `Failed to process parameter: llm_serving` + `param_value: ''` | **WebUI caveat**（不是 `known_issues.md` 里的编号问题）：Pipeline 从 .py 文件导入后，AST 解析器无法解析 `self.llm_serving` 引用，导致所有算子的 llm_serving 为空 —— 需在 WebUI 中为**每个** LLM 算子手动分配 serving |
+| `Failed to process parameter: llm_serving` + `param_value: ''` | **WebUI caveat**（不是 `known_issues.md` 里的编号问题）：Pipeline 配置中的 LLM 算子缺少 serving id，或该 serving 的运行凭证尚未配置；通过 MCP 为**每个** LLM 算子设置 serving id，并在本机结果查看器确认 `credential_configured` |
 <!-- @endif -->
 
 ---

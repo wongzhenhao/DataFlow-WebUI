@@ -36,7 +36,7 @@
         "cursor"
       ],
       "summary": "Plan evidence-grounded AI4S pipelines for scientific text and registered multimodal conversions, including documents/images, audio, VQA, chemistry text to SMILES, provenance and strict capability guards.",
-      "version": "1.2.0"
+      "version": "1.2.1"
     },
     {
       "id": "dataflow-dev",
@@ -51,7 +51,7 @@
         "cursor"
       ],
       "summary": "DataFlow developer assistant with scientific-text and registered multimodal pipeline intake: loads architecture knowledge and routes development, diagnosis and review intents.",
-      "version": "1.3.0"
+      "version": "1.3.1"
     },
     {
       "id": "dataflow-operator-builder",
