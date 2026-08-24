@@ -1,8 +1,8 @@
 ---
 name: generating-dataflow-pipeline
-description: Plan and write evidence-grounded DataFlow pipelines for text-modal scientific data such as papers, abstracts, sections, and research corpora. Use for scientific ingestion, structured extraction, claim-evidence records, grounded QA, synthesis, quality filtering, operator selection, field-flow repair, and runnable pipeline generation from representative JSONL data. General text remains supported as a fallback.
+description: Plan and write evidence-grounded DataFlow pipelines for scientific text and registered multimodal conversions. Use for papers, PDFs, scanned images, audio transcription, visual/PDF QA, OCR chemistry text to SMILES, SMILES comparison, structured extraction, claim-evidence records, operator selection, field-flow repair, and runnable pipeline generation from representative JSONL data. Enforce capability limits instead of inventing unsupported operators. General text remains supported as a fallback.
 ---
-# AI4S Scientific-Text Pipeline Generator
+# AI4S Scientific Data Pipeline Generator
 
 ## Goal
 
@@ -10,13 +10,13 @@ This skill is used when users provide:
 
 - **Target**: What scientific-data pipeline should achieve
 - **Sample Data File**: Path to a JSONL file containing 1-5 representative data samples
-- **Evidence Contract**: Optional grounding, provenance, citation, and missing-value requirements
+- **Evidence Contract**: Optional grounding, provenance, citation, modality, and missing-value requirements
 
 The skill must:
 
 1. **Read and analyze the JSONL file** at the provided path
-2. Infer data structure, scientific content, provenance fields, field types, and content characteristics
-3. Determine task type (document ingestion, scientific extraction, claim-evidence binding, grounded QA, synthesis, evaluation)
+2. Infer fields, modalities, scientific content, provenance, and required serving capabilities
+3. Determine task type (multimodal ingestion, scientific extraction, QA, chemistry conversion, synthesis, evaluation)
 4. Select appropriate operators from preferred primitives
 5. Validate field dependencies
 6. Output intermediate operator decision summary
@@ -30,21 +30,21 @@ Users provide:
 Target: [Clear task description]
 Sample file: [Path to JSONL file, e.g., ./data/input.jsonl]
 Expected outputs: [Optional field list]
-Evidence contract: [Optional; source_only by default for scientific text]
+Evidence contract: [Optional; source_only by default for scientific data]
 ```
 
 **Important**: The sample file is a JSONL file (one JSON object per line), not a JSON array.
 
 ## Preferred Operator Strategy
 
-**Six Core Primitives** (high-coverage operators for scientific-text tasks):
+**Core text primitives and ingestion families**:
 
 1. `PromptedGenerator` - Single-field LLM generation
 2. `FormatStrPromptedGenerator` - Multi-field template generation
 3. `Text2MultiHopQAGenerator` - Multi-hop QA pair construction
 4. `PromptedFilter` - LLM-based quality filtering
 5. `GeneralFilter` - Rule-based filtering
-6. KBC trio (always used together in order): `FileOrURLToMarkdownConverterFlash` → `KBCChunkGenerator` → `KBCTextCleaner`
+6. Document ingestion: one `FileOrURLToMarkdownConverter*`, then optional `KBCChunkGenerator` and optional `KBCTextCleaner`
 
 These are **preferred primitives**, not fixed workflows. They can be used repeatedly and combined flexibly.
 
@@ -60,6 +60,15 @@ require evidence for claims, keep numbers/units/formulas unchanged, use null or
 `Unknown` for missing support, and label source-backed, inferred, simulated, and
 illustrative content. Never invent citations or location metadata.
 
+## Multimodal Ingestion Mode (MANDATORY)
+
+For document/image paths, audio, visual QA, PDF-VQA artifacts, chemistry text,
+or SMILES evaluation, read
+[`references/multimodal_ingestion_mode.md`](references/multimodal_ingestion_mode.md).
+Map existing JSONL columns to semantic roles; never embed binary/base64 data.
+Split mixed-modality rows into homogeneous subpipelines, each beginning with a
+`GeneralFilter`. Report unsupported capabilities instead of fabricating code.
+
 ## Operator Selection Priority Rule (MANDATORY)
 
 When a specialized operator exists for the task, it MUST be used over generic operators. Do NOT use `PromptedGenerator` to replicate functionality that a dedicated operator already provides.
@@ -71,7 +80,11 @@ When a specialized operator exists for the task, it MUST be used over generic op
 | Extract scientific records from multiple source/provenance fields | `FormatStrPromptedGenerator` with strict JSON | Free-form `PromptedGenerator` output |
 | Bind scientific claims to evidence | `FormatStrPromptedGenerator`; require verbatim evidence or `Unknown` | Uncited synthesis |
 | Generate grounded QA pairs from text | `Text2MultiHopQAGenerator`; retain `supporting_facts` | `PromptedGenerator` with a QA prompt |
-| Convert file path / URL to text | KBC trio (`FileOrURLToMarkdownConverterFlash` → `KBCChunkGenerator` → `KBCTextCleaner`) | `PromptedGenerator` to summarize files |
+| Convert document/image path or URL | One API/Local/Flash converter; add chunk/clean only if needed | Fixed Flash trio for every target |
+| Transcribe speech | `Speech2TextGenerator` with audio-capable serving | Text-only prompted generator |
+| Answer a supplied visual question | `PromptedVQAGenerator` with validated row encoding | Generic OCR or OCSR claims |
+| Extract SMILES from OCR/scientific text | `ExtractSmilesFromTextGenerator` | Unique SMILES from formula alone |
+| Compare SMILES when gold exists | `SmilesEquivalenceDatasetEvaluator` | Claim equivalence without gold |
 | Score source/output fidelity using multiple fields | `FormatStrPromptedGenerator` + `GeneralFilter` | `PromptedFilter` (single `input_key` only) |
 | Filter by deterministic rule on existing fields | `GeneralFilter` | `PromptedFilter` |
 | Generate new content from one / multiple fields | `PromptedGenerator` / `FormatStrPromptedGenerator` | Unnecessary fragmented LLM stages |
@@ -99,9 +112,10 @@ When this skill is used with MCP and a registered dataset, first call `get_datas
 5. **Avoid overwriting**: Do not overwrite original user fields unless explicitly requested
 6. **Preserve provenance**: Carry stable source/document ids and supplied section/page/chunk locations through scientific stages
 7. **Separate evidence and synthesis**: Store source spans, generated claims, support status, and scores in distinct fields
+8. **Map multimodal roles**: Recognize `source_id`, `source`, `media_type`, `modality`, `question`, `abbreviations`, and `golden_label` or their existing equivalents
 <!-- @if mcp==yes -->
-8. **If committing through MCP**: call `validate_pipeline_config` before create/update; field-flow errors should be fixed before commit
-9. If `validate_pipeline_config` returns `missing_input_field`, treat its `suggested_fields` and `repair_hint` as the first repair path. Fix the binding and re-validate; do **not** broaden MCP browsing or switch categories just because a field name was wrong.
+9. **If committing through MCP**: call `validate_pipeline_config` before create/update; field-flow errors should be fixed before commit
+10. If `validate_pipeline_config` returns `missing_input_field`, treat its `suggested_fields` and `repair_hint` as the first repair path. Fix the binding and re-validate; do **not** broaden MCP browsing or switch categories just because a field name was wrong.
 <!-- @endif -->
 
 ```
@@ -114,20 +128,12 @@ When this skill is used with MCP and a registered dataset, first call `get_datas
 - Don't mechanically create one prompted operator per tiny requirement. If one operator can handle multiple related transformations, prefer that over splitting.
 - Multiple prompted operators are allowed when the task genuinely requires distinct semantic transformations. If using multiple, justify each step's role, input field, and output field.
 
-## KBC Usage Constraint (MANDATORY)
+## Document Ingestion Constraint (MANDATORY)
 
-The KBC trio must always be used in this exact order:
-
-1. `FileOrURLToMarkdownConverterFlash` — converts file path / URL → Markdown text (field: `text_path`)
-2. `KBCChunkGenerator` — splits Markdown into chunks (field: `raw_chunk`)
-3. `KBCTextCleaner` — LLM-cleans each chunk (field: `cleaned_chunk`)
-
-Rules:
-
-- All three steps are required; never skip one.
-- Input to step 1 must be a file path or URL, never plain text content.
-- Each step's `output_key` becomes the next step's `input_key`.
-- Use the default field names (`text_path`, `raw_chunk`, `cleaned_chunk`) unless explicitly requested otherwise.
+Choose exactly one API/Local/Flash converter that the environment can run.
+Stop at `text_path` for Markdown-only targets; add `KBCChunkGenerator` for
+row-level `raw_chunk`; add `KBCTextCleaner` only when requested and preserve
+`raw_chunk`. Input to the converter must be a path/URL, never inline text.
 
 ## GeneralFilter Field Safety Rule (MANDATORY)
 
@@ -150,6 +156,10 @@ Output this first:
 ```json
 {
   "mode": "science_text",
+  "modality": "text",
+  "capability_status": "supported",
+  "missing_prerequisites": [],
+  "unsupported": [],
   "grounding": "source_only",
   "ops": ["OperatorA", "OperatorB", "OperatorC"],
   "field_flow": "field_a -> field_b -> field_c",
@@ -158,6 +168,10 @@ Output this first:
   "reason": "Why this ordered operator chain satisfies the target, how field dependencies are satisfied, and why prompted operators are or are not used."
 }
 ```
+
+For mixed modalities, return `subpipelines`, each containing the same decision
+fields plus its leading modality `GeneralFilter`. Do not emit one cross-modality
+operator chain or claim the separate output JSONLs are automatically merged.
 
 ### Stage 2: Complete Response (6 sections)
 
@@ -170,13 +184,14 @@ Output this first:
 
 ## LLM Serving Pre-check Rule (MANDATORY)
 
-Before generating pipeline code, the agent MUST confirm the user's LLM serving configuration. If any LLM-dependent operator is used (e.g., `PromptedGenerator`, `FormatStrPromptedGenerator`, `PromptedFilter`, `Text2MultiHopQAGenerator`, `KBCTextCleaner`), the following information is required:
+Before generating pipeline code, confirm serving configuration for every LLM/VLM/audio-dependent operator, including core prompted operators, `KBCTextCleaner`, `Speech2TextGenerator`, `PromptedVQAGenerator`, and chemistry operators.
 
 **Required information** (ask the user if not provided):
 
 1. **`api_url`**: The LLM API endpoint (e.g., `https://api.openai.com/v1/chat/completions` or a self-hosted/proxy URL)
 2. **`model_name`**: The model to use (e.g., `gpt-4o`, `gpt-4o-mini`, `deepseek-chat`)
 3. **API key variable name**: Which environment variable holds the key — `OPENAI_API_KEY`, `DF_API_KEY`, etc. Ask for the **name only**. Never ask for, accept or repeat the key's value.
+4. **Modality support**: Confirm the selected model accepts the required text, image, or audio payload. A reachable text endpoint is not proof of multimodal support.
 
 **When to ask**:
 
@@ -200,7 +215,7 @@ Before generating pipeline code, the agent MUST confirm the user's LLM serving c
 
 **When NOT to ask** (skip the pre-check):
 
-- User explicitly provided all three pieces of info
+- User explicitly provided all required serving and modality-capability information
 - Pipeline uses only non-LLM operators (e.g., `GeneralFilter`, `KBCChunkGenerator`, `FileOrURLToMarkdownConverterFlash`)
 
 <!-- @if profile==webui -->
@@ -398,27 +413,14 @@ The key is **read from the environment at run time and never written anywhere**.
 - Run: `run(storage=self.storage.step())`
 - Each rule must return boolean `pd.Series`. Referenced fields must already exist.
 
-**6) KBC Trio (always used in this order)**
+**6) Document ingestion**
 
-**Step 1 — `FileOrURLToMarkdownConverterFlash`**
-
-- Constructor: `FileOrURLToMarkdownConverterFlash(intermediate_dir="../example_data/KBCleaningPipeline/flash/", mineru_model_path="opendatalab/MinerU2.5-2509-1.2B", batch_size=4, replicas=1, num_gpus_per_replica=1.0, engine_gpu_util_rate_to_ray_cap=0.9)`
-- **Does NOT take `llm_serving`** — this operator has no LLM dependency.
-- `mineru_model_path` is **required** — passing `None` raises `ValueError`. Use a HuggingFace model ID or local path.
-- Run: `run(storage=self.storage.step(), input_key="source", output_key="text_path")`
-- Input must be a file path or URL (`.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.html`, `.xml`, `.txt`, `.md`).
-
-**Step 2 — `KBCChunkGenerator`**
-
-- Constructor: `KBCChunkGenerator(chunk_size=512, chunk_overlap=50, split_method="token", min_tokens_per_chunk=100, tokenizer_name="bert-base-uncased")`
-- Run: `run(storage=self.storage.step(), input_key="text_path", output_key="raw_chunk")`
-- `split_method` options: `"token"`, `"sentence"`, `"semantic"`, `"recursive"`.
-
-**Step 3 — `KBCTextCleaner`**
-
-- Constructor: `KBCTextCleaner(llm_serving, lang="en")`
-- Run: `run(storage=self.storage.step(), input_key="raw_chunk", output_key="cleaned_chunk")`
-- LLM-cleans each chunk; output is ready for downstream QA generation.
+- Converter: choose `FileOrURLToMarkdownConverterAPI`, `Local`, or `Flash`; all
+  run as `run(storage, input_key="source", output_key="text_path")`.
+- Chunker: `KBCChunkGenerator(...).run(storage, input_key="text_path", output_key="raw_chunk")`.
+- Optional cleaner: `KBCTextCleaner(llm_serving, lang="en").run(storage, input_key="raw_chunk", output_key="cleaned_chunk")`.
+- Read `references/multimodal_ingestion_mode.md` for converter prerequisites,
+  speech/vision/chemistry signatures, PDF-VQA fields, and capability guards.
 
 ### Correct Import Paths (MANDATORY)
 
@@ -429,12 +431,16 @@ from dataflow.serving import APILLMServing_request
 
 # Operators
 from dataflow.operators.core_text import PromptedGenerator, FormatStrPromptedGenerator, Text2MultiHopQAGenerator, PromptedFilter, GeneralFilter
-from dataflow.operators.knowledge_cleaning import FileOrURLToMarkdownConverterFlash, KBCChunkGenerator, KBCTextCleaner
+from dataflow.operators.knowledge_cleaning import FileOrURLToMarkdownConverterAPI, FileOrURLToMarkdownConverterLocal, FileOrURLToMarkdownConverterFlash, KBCChunkGenerator, KBCTextCleaner
+from dataflow.operators.core_speech import Speech2TextGenerator
+from dataflow.operators.core_vision import PromptedVQAGenerator
+from dataflow.operators.chemistry import ExtractSmilesFromTextGenerator, SmilesEquivalenceDatasetEvaluator
 ```
 
 ## Extended operator reference
 
-Use the sibling `../core_text/` package only when the six core primitives above
+Use `references/multimodal_ingestion_mode.md` for any non-text source or SMILES
+task. Use the sibling `../core_text/` package only when the core primitives above
 do not cover the task, or when you need an operator's edge cases, exact return
 semantics, or documented failure modes. Do not load it preemptively.
 
@@ -446,17 +452,19 @@ semantics, or documented failure modes. Do not load it preemptively.
    `../core_text/<category>/<operator>/SKILL.md` and its documented failure
    example. This bundled reference is the offline source for this profile.
 <!-- @endif -->
-2. Treat the six core primitives in this file as the fast path. The `core_text`
+2. Treat the core primitives in this file as the fast path. The `core_text`
    index owns the full operator list, so do not duplicate it here.
 
 ## Input File Content Analysis Rule (MANDATORY)
 
 Analyze sample data content to determine task nature:
 
-**File path fields** (e.g., `pdf_path`, `image_path`, `doc_path`):
+**Multimodal fields** (`source`, file paths/URLs, `media_type`, `modality`,
+`question`, `abbreviations`, `golden_label`):
 
-- → KBC trio in order: `FileOrURLToMarkdownConverterFlash` → `KBCChunkGenerator` → `KBCTextCleaner` (supports `.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.html`, `.xml`, `.txt`, `.md`)
-- → Document/file processing workflow
+- → Read `references/multimodal_ingestion_mode.md`, classify capability, and
+  split mixed modalities into filtered subpipelines
+- → Preserve source references; never embed binary/base64 in JSONL
 
 **Scientific text fields** (e.g., `abstract`, `section_text`, `paper_text`, `methods`, `results`):
 
@@ -481,7 +489,10 @@ See `examples/` folder for complete workflows:
 1. **`examples/basic_generate_and_filter.md`** — `PromptedGenerator` + `PromptedFilter` (simplest pattern)
 2. **`examples/multifield_scoring.md`** — `FormatStrPromptedGenerator` with multi-field scoring
 3. **`examples/multi_stage_pipeline.md`** — Multiple `PromptedGenerator` stages + `GeneralFilter`
-4. **`examples/kbc_pdf_to_qa.md`** — KBC trio (`FileOrURLToMarkdownConverterFlash` + `KBCChunkGenerator` + `KBCTextCleaner`) + `Text2MultiHopQAGenerator` + `PromptedFilter` (scores nested QA_pairs column per chunk)
+4. **`examples/kbc_pdf_to_qa.md`** — PDF conversion + chunking + optional cleaning selected for grounded multi-hop QA
 5. **`examples/science_claim_evidence.md`** — Scientific claim/evidence extraction + multi-field fidelity gate
+6. **`examples/science_document_to_text.md`** — PDF/scanned image → raw Markdown chunks without LLM rewriting
+7. **`examples/science_audio_to_text.md`** — Audio path/URL → scientific transcript
+8. **`examples/chemistry_text_to_smiles.md`** — OCR chemistry text → SMILES, with optional gold comparison
 
 These are strategy guidance, not templates to copy blindly. Generated code must follow standard pipeline structure.

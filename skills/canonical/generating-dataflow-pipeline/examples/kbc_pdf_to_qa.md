@@ -19,14 +19,14 @@ KBC supports multiple file types: `.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`, `.gi
 {
   "ops": ["FileOrURLToMarkdownConverterFlash", "KBCChunkGenerator", "KBCTextCleaner", "Text2MultiHopQAGenerator", "PromptedFilter"],
   "field_flow": "pdf_path -> text_path -> raw_chunk -> cleaned_chunk -> QA_pairs -> qa_eval (score & filter)",
-  "reason": "Input is PDF file paths, so the KBC trio is required in order. Text2MultiHopQAGenerator produces multi-hop QA pairs from cleaned chunks. The QA_pairs column is a nested list of dicts per row (question, reasoning_steps, answer, supporting_facts, type) — NOT separate dataframe columns. PromptedFilter scores the serialized QA_pairs list as a whole per chunk and filters out low-quality rows. FormatStrPromptedGenerator is NOT usable here because question/answer are not separate columns."
+  "reason": "Input is PDF file paths, so this workflow converts and chunks them first. LLM cleaning is included because the target explicitly asks for cleaned QA input, but it is not required for conversion-only targets and raw_chunk remains available. Text2MultiHopQAGenerator produces nested multi-hop QA pairs; PromptedFilter scores that single nested column per chunk."
 }
 ```
 
 ### 1. Field Mapping
 ```
 Available in sample:
-  - pdf_path (file path — valid for KBC trio)
+  - pdf_path (source file path)
 
 To be generated:
   - text_path   (output from FileOrURLToMarkdownConverterFlash)
@@ -67,7 +67,7 @@ Field flow:
    - Output: qa_eval (numeric score; rows outside [min_score, max_score] are dropped)
 
 ### 3. Reasoning Summary
-- The KBC trio is required because `pdf_path` is a file path (not text content); all three steps must run in order.
+- PDF conversion is required because `pdf_path` is not inline text. Chunking is required by this QA target; cleaning is selected here but is optional for other targets.
 - `Text2MultiHopQAGenerator` is preferred over generic `PromptedGenerator` for multi-hop QA construction.
 - `Text2MultiHopQAGenerator` outputs a **nested list** of QA dicts in the `QA_pairs` column — `question` and `answer` are NOT separate dataframe columns. Therefore `FormatStrPromptedGenerator` cannot reference them as kwargs.
 - `PromptedFilter` works here because it takes a single `input_key` (`QA_pairs`). The LLM sees the serialized QA list and scores overall quality per chunk.
@@ -208,7 +208,7 @@ if __name__ == "__main__":
 - `FileOrURLToMarkdownConverterFlash` requires GPU for PDF/image inputs; `.md`/`.txt` skip MinerU
 - `mineru_model_path` must be a valid HuggingFace model ID or local path — `None` raises `ValueError`
 - Each document generates multiple chunks; each chunk produces up to `num_q` QA pairs (actual count depends on sentence triples)
-- The KBC trio must always run in full — do not skip any of the three steps
+- Preserve `raw_chunk` when cleaning is enabled so scientific formulas, units, tables, and qualifiers remain auditable
 - Input text must be 100–200,000 chars, have ≥2 sentences, and ≤30% special chars — otherwise `qa_pairs` will be empty
 
 **Debugging**:

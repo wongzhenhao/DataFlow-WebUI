@@ -2,7 +2,7 @@
 name: dataflow-dev
 description: >
   DataFlow 开发专家上下文加载器。当用户在 DataFlow 仓库中进行开发时触发，
-  涵盖：新建算子/Pipeline/Prompt、诊断报错、规范审查、
+  涵盖：新建算子/Pipeline/Prompt、科学文本与已注册多模态 Pipeline、诊断报错、规范审查、
   以及感知仓库变更并建议更新知识库。
   Trigger: user is developing in DataFlow repo, asks to create operator/pipeline/prompt,
   encounters errors, wants code review, or asks about operators.
@@ -126,10 +126,16 @@ if TYPE_CHECKING:
 - 是否需要断点续传（BatchedPipelineABC）
 - 对科学文本，确认研究对象与任务类型（摄取、结构化抽取、claim-evidence、grounded QA、评估）
 - 对科学文本，确认 source-only / 外部知识边界、来源 ID/章节字段、缺失证据处理和真实性标签
+- 对多模态输入，确认 `source`/路径字段、`media_type`、`modality`、目标派生字段及模型是否支持所需图像/音频输入
+- 对混合模态 JSONL，按 `modality` 生成多个先过滤再转换的 Pipeline，不生成按行动态分支的单 Pipeline
+- 对 chemistry，区分 OCR/科学文本、仅分子式和二维结构图；后两者不得伪装成可直接生成唯一 SMILES
 
 科学文本默认采用 evidence-first：保留来源字段，不编造引用、数值、单位、公式或页码；
 将 source-backed、inferred、simulated、illustrative 内容分开标记。详细规则读取
 `../generating-dataflow-pipeline/references/science_text_mode.md`。
+文档/图片、音频、VQA、PDF-VQA 或 SMILES 任务还必须读取
+`../generating-dataflow-pipeline/references/multimodal_ingestion_mode.md`，先输出
+`supported` / `conditional` / `unsupported` 能力状态，再决定是否生成代码。
 
 ### Step 1.5: LLM Serving 前置检查（MANDATORY — 当 Pipeline 包含 LLM 算子时）
 
@@ -156,6 +162,7 @@ if TYPE_CHECKING:
 优先使用已有算子，参考 `context/knowledge_base.md` §八。
 若为 core_text 算子，参考 `generating-dataflow-pipeline` skill 的算子选择规则。
 论文主题属于化学不等于选择 chemistry 类；只有明确的 SMILES 抽取/等价评估才使用该类。
+仅有分子式不能确定唯一 SMILES；二维结构图需要当前未注册的 OCSR 算子。
 
 ### Step 3: 生成代码
 

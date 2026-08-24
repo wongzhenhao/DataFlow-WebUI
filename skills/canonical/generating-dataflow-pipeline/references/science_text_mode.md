@@ -29,7 +29,7 @@ explicitly asks for enrichment, and keep enriched facts in a separate field.
 | Generate grounded QA from sufficiently long text | `Text2MultiHopQAGenerator`; retain `supporting_facts` |
 | Score fidelity across source and generated fields | `FormatStrPromptedGenerator` → `GeneralFilter` |
 | Refine an existing scientific answer while preserving facts | `PromptedRefiner`; inspect its bundled reference first |
-| Start from a PDF, URL, or document path | KBC trio, then one of the chains above |
+| Start from a PDF, URL, or document path | One available converter; add chunking/cleaning only as the downstream target needs |
 | Remove exact/near duplicates or surface noise | A suitable `general_text` operator after preserving identity fields |
 
 Do not add an LLM stage when a deterministic field transform is sufficient.

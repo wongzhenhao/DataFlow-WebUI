@@ -35,8 +35,8 @@
         "codex",
         "cursor"
       ],
-      "summary": "Plan evidence-grounded AI4S pipelines for scientific text from a target + sample JSONL, including ingestion, extraction, QA, provenance and quality gates. With MCP, also validates and commits them.",
-      "version": "1.1.0"
+      "summary": "Plan evidence-grounded AI4S pipelines for scientific text and registered multimodal conversions, including documents/images, audio, VQA, chemistry text to SMILES, provenance and strict capability guards.",
+      "version": "1.2.0"
     },
     {
       "id": "dataflow-dev",
@@ -50,8 +50,8 @@
         "codex",
         "cursor"
       ],
-      "summary": "DataFlow developer assistant with scientific-text pipeline intake: loads architecture knowledge and routes intents (new operator / pipeline / prompt, diagnose, review).",
-      "version": "1.2.0"
+      "summary": "DataFlow developer assistant with scientific-text and registered multimodal pipeline intake: loads architecture knowledge and routes development, diagnosis and review intents.",
+      "version": "1.3.0"
     },
     {
       "id": "dataflow-operator-builder",
@@ -137,8 +137,8 @@
     "the request against these and then reads only that skill's SKILL.md."
   ],
   "routing_triggers": {
-    "generating-dataflow-pipeline": "build an evidence-grounded AI4S pipeline for papers, abstracts, scientific sections or research corpora from target + sample JSONL; ingest documents, extract structured records or claims, generate grounded QA, pick operators, or fix field mismatches",
-    "dataflow-dev": "work inside the DataFlow repo itself: add a scientific-text or general operator/pipeline/prompt, diagnose a DataFlow error, or review DataFlow code",
+    "generating-dataflow-pipeline": "build an evidence-grounded AI4S pipeline from target + sample JSONL for papers, PDF/image ingestion, audio transcription, visual/PDF QA, chemistry text to SMILES, SMILES comparison, scientific extraction, operator selection, or field repair",
+    "dataflow-dev": "work inside the DataFlow repo itself: add a scientific-text, multimodal, or general operator/pipeline/prompt, diagnose a DataFlow error, or review DataFlow code",
     "dataflow-operator-builder": "scaffold a new operator with registry registration, a CLI wrapper and tests",
     "prompt-template-builder": "write or rewrite a `prompt_template` class for an existing operator"
   },
