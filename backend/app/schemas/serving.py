@@ -23,7 +23,10 @@ class ServingUpdateSchema(BaseModel):
     # cls_name is not allowed to be updated
 
 class ServingDetailSchema(ServingQuerySchema, ServingCreateSchema):
-    pass
+    credential_configured: bool = Field(
+        False,
+        description="Whether an API key is loaded for this backend session",
+    )
 
 class ServingClassSchema(BaseModel):
     cls_name: str = Field(..., description="Serving类名")

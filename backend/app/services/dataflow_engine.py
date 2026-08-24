@@ -24,6 +24,7 @@ logger = get_logger(__name__)
 import inspect
 
 from app.services.param_coercion import coerce_param_value
+from app.services.serving_runtime import build_api_serving_init_params
 
 class DataFlowEngineError(Exception):
     """DataFlow Engine 自定义异常类"""
@@ -208,30 +209,11 @@ class DataFlowEngine:
             
             ## This part of code is only for APILLMServing_request
             if serving_info['cls_name'] == 'APILLMServing_request':
-                api_key_val = None
                 # Use the serving_id from serving_info (set by _get method)
                 actual_serving_id = serving_info.get('id', serving_id)
-                key_name_var = f"DF_API_KEY_{actual_serving_id}"
-                
-                # First pass: find values
-                for params in serving_info['params']:
-                    # Check 'value' first, then fallback to 'default_value'
-                    current_val = params.get('value') if params.get('value') is not None else params.get('default_value')
-                    
-                    if params['name'] == 'api_key':
-                        api_key_val = current_val
-                    elif params['name'] == 'key_name_of_api_key':
-                        key_name_var = current_val
-                        params['value'] = key_name_var
-                    
-                # Build params dict for init
-                for params in serving_info['params']:
-                    if params['name'] != 'api_key':
-                        params_dict[params['name']] = params.get('value') if params.get('value') is not None else params.get('default_value')
+                params_dict = build_api_serving_init_params(serving_info, actual_serving_id)
                 
                 logger.info(f"Initializing serving with params: {params_dict}")
-                os.environ[key_name_var] = api_key_val
-                logger.info(f"Environment variable {key_name_var} set to {api_key_val}")
                 serving_instance = SERVING_CLS_REGISTRY[serving_info['cls_name']](**params_dict)
                 
             return serving_instance

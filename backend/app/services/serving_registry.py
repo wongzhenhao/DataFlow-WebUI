@@ -3,6 +3,7 @@ import importlib
 import inspect
 from typing import Dict, List, Any
 from app.core.config import settings
+from app.services.serving_runtime import sanitize_serving_params
 """
 Registry Yaml Format:
 {
@@ -28,6 +29,7 @@ class ServingRegistry:
     def __init__(self, path: str | None = None):
         self.path = path or settings.SERVING_REGISTRY
         self._ensure()
+        self._migrate_legacy_secrets()
 
     def _ensure(self):
         if not os.path.exists(self.path):
@@ -35,9 +37,26 @@ class ServingRegistry:
                 yaml.dump({}, f)
                 
     def _get_all(self):
-        with open(self.path, 'r') as f:
+        with open(self.path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
-        return data
+        return data or {}
+
+    def _write(self, data: Dict[str, Any]) -> None:
+        with open(self.path, 'w', encoding='utf-8') as f:
+            yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
+
+    def _migrate_legacy_secrets(self) -> None:
+        """Scrub legacy YAML API keys so users must re-enter them for this session."""
+        data = self._get_all()
+        changed = False
+        for item in data.values():
+            params = item.get("params", [])
+            sanitized = sanitize_serving_params(params)
+            if sanitized != params:
+                item["params"] = sanitized
+                changed = True
+        if changed:
+            self._write(data)
     
     def _get(self, id: str) -> Dict[str, Any] | None:
         data = self._get_all()
@@ -53,10 +72,9 @@ class ServingRegistry:
         data[id] = {
             "name": name,
             "cls_name": cls_name,
-            "params": params
+            "params": sanitize_serving_params(params)
         }
-        with open(self.path, 'w') as f:
-            yaml.dump(data, f)
+        self._write(data)
         return id
 
     def _update(self, id: str, name: str | None = None, cls_name: str | None = None, params: List[Dict[str, Any]] | None = None) -> bool:
@@ -70,9 +88,12 @@ class ServingRegistry:
             raise ValueError("cls_name is not allowed to be updated")
         if params is not None:
             # Update parameter values only, keeping other metadata
-            current_params_map = {p['name']: p for p in data[id].get("params", [])}
+            current_params_map = {
+                p['name']: p
+                for p in sanitize_serving_params(data[id].get("params", []))
+            }
             
-            for new_p in params:
+            for new_p in sanitize_serving_params(params):
                 pname = new_p.get('name')
                 if pname in current_params_map:
                     # Only update the value if present in the new param
@@ -84,8 +105,7 @@ class ServingRegistry:
                      
             data[id]["params"] = list(current_params_map.values())
             
-        with open(self.path, 'w') as f:
-            yaml.dump(data, f)
+        self._write(data)
         return True
 
     def _delete(self, id: str) -> bool:
@@ -93,8 +113,7 @@ class ServingRegistry:
         if id not in data:
             return False
         del data[id]
-        with open(self.path, 'w') as f:
-            yaml.dump(data, f)
+        self._write(data)
         return True
 
     def get_serving_classes(self) -> List[Dict[str, Any]]:

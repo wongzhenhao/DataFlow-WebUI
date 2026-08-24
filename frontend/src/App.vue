@@ -5,7 +5,7 @@
 </template>
 
 <script>
-import i18n from '@/js/i18n.js'
+import i18n from '@/js/viewerI18n.js'
 import { mapActions } from 'pinia'
 import { useAppConfig } from '@/stores/appConfig'
 import { useTheme } from './stores/theme';
@@ -63,7 +63,7 @@ export default {
             }
         }
     },
-    beforeDestroy() {
+    beforeUnmount() {
         this.clearTimer()
     }
 }

@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.schemas.pipelines import PipelineValidationIssue, PipelineValidationResult
 # from app.services.operator_registry import _op_registry
 from app.core.container import container
+from app.services.runtime_credentials import serving_credential_is_configured
 logger = get_logger(__name__)
 
 from dataclasses import dataclass
@@ -952,6 +953,20 @@ class PipelineRegistry:
                         field_name=serving_id,
                         available_fields=current_fields,
                     ))
+                elif not serving_credential_is_configured(serving_id):
+                    warnings.append(self._make_validation_issue(
+                        level="warning",
+                        code="serving_credential_not_configured",
+                        message=(
+                            f"算子 '{op_name}' 引用的 llm_serving '{serving_id}' 尚未为当前后端会话配置 API Key。"
+                            " 请先在运行凭证界面填写。"
+                        ),
+                        operator_index=idx,
+                        operator_name=op_name,
+                        param_name="llm_serving",
+                        field_name=serving_id,
+                        available_fields=current_fields,
+                    ))
 
             if "embedding_serving" in init_def_names:
                 raw_embedding_serving = init_params.get("embedding_serving")
@@ -974,6 +989,20 @@ class PipelineRegistry:
                         level="error",
                         code="serving_not_found",
                         message=f"算子 '{op_name}' 引用了不存在的 embedding_serving '{embedding_serving_id}'。",
+                        operator_index=idx,
+                        operator_name=op_name,
+                        param_name="embedding_serving",
+                        field_name=embedding_serving_id,
+                        available_fields=current_fields,
+                    ))
+                elif embedding_serving_id and not serving_credential_is_configured(embedding_serving_id):
+                    warnings.append(self._make_validation_issue(
+                        level="warning",
+                        code="serving_credential_not_configured",
+                        message=(
+                            f"算子 '{op_name}' 引用的 embedding_serving '{embedding_serving_id}' 尚未为当前后端会话配置 API Key。"
+                            " 请先在运行凭证界面填写。"
+                        ),
                         operator_index=idx,
                         operator_name=op_name,
                         param_name="embedding_serving",

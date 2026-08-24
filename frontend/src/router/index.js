@@ -1,30 +1,27 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 
-import tool from './tools'
-
-import Manage from './Manage'
-
-import home from '@/views/client/home/index.vue'
+import Review from '@/views/review/index.vue'
 
 const router = createRouter({
     history: createWebHashHistory(import.meta.env.BASE_URL),
     routes: [
         {
             path: '/',
-            name: 'home',
-            component: home,
+            name: 'review',
+            component: Review,
             meta: {
-                title: 'Dataflow'
+                title: 'DataFlow Results'
             }
         },
-        Manage
+        {
+            path: '/:pathMatch(.*)*',
+            redirect: '/'
+        }
     ]
 })
 
 router.beforeEach((to, from, next) => {
-    if (to.meta.title) {
-        document.title = to.meta.title
-    }
+    if (to.meta.title) document.title = to.meta.title
     next()
 })
 

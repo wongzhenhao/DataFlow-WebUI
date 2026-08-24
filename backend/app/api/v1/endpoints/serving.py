@@ -1,4 +1,3 @@
-import os
 import copy
 from typing import List, Dict, Any 
 from fastapi import APIRouter, HTTPException
@@ -16,14 +15,20 @@ from app.schemas.serving import (
     ServingUpdateSchema
 )
 from app.services.serving_registry import SERVING_CLS_REGISTRY
+from app.services.runtime_credentials import (
+    clear_serving_credential,
+    serving_credential_is_configured,
+    set_serving_credential,
+)
+from app.services.serving_runtime import (
+    ServingCredentialMissingError,
+    build_api_serving_init_params,
+    extract_api_key,
+    sanitize_serving_params,
+)
 
 router = APIRouter(tags=["serving"])
 
-
-def _mask_key(key: str) -> str:
-    if not key or len(key) <= 8:
-        return "****"
-    return key[:3] + "****" + key[-4:]
 
 @router.get(
     "/",
@@ -41,21 +46,8 @@ def list_serving_instances():
                 v_copy = copy.deepcopy(v)
                 v_copy['id'] = k
                 if v_copy.get('cls_name') == 'APILLMServing_request':
-                    v_copy['params'] = [p for p in v_copy.get('params', []) if p['name'] != 'key_name_of_api_key']
-                    api_key_p = None
-                    rest = []
-                    for p in v_copy['params']:
-                        if p['name'] == 'api_key':
-                            raw = p.get('value') or p.get('default_value') or ''
-                            p['value'] = _mask_key(str(raw))
-                            p['masked'] = True
-                            api_key_p = p
-                        else:
-                            rest.append(p)
-                    if api_key_p:
-                        idx = next((i for i, p in enumerate(rest) if p['name'] == 'model_name'), len(rest))
-                        rest.insert(idx, api_key_p)
-                    v_copy['params'] = rest
+                    v_copy['params'] = sanitize_serving_params(v_copy.get('params', []))
+                    v_copy['credential_configured'] = serving_credential_is_configured(k)
                 for p in v_copy.get('params', []):
                     if 'value' not in p or p['value'] is None:
                         p['value'] = p.get('default_value')
@@ -108,20 +100,17 @@ def get_serving_detail(id: str):
     """
     try:
         serving_data = container.serving_registry._get(id)
-        print(type(serving_data))
         if not serving_data:
             raise HTTPException(status_code=404, detail=f"Serving instance with id {id} not found")
         
         resp_data = copy.deepcopy(serving_data)
         if resp_data.get('cls_name') == 'APILLMServing_request':
-            resp_data['params'] = [p for p in resp_data.get('params', []) if p['name'] != 'key_name_of_api_key']
-            for p in resp_data['params']:
-                if p['name'] == 'api_key':
-                    raw = p.get('value') or p.get('default_value') or ''
-                    p['value'] = _mask_key(str(raw))
-                    p['masked'] = True
+            resp_data['params'] = sanitize_serving_params(resp_data.get('params', []))
+            resp_data['credential_configured'] = serving_credential_is_configured(id)
             
         return ok(resp_data)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
@@ -136,16 +125,13 @@ def update_serving_instance(id: str, body: ServingUpdateSchema):
     更新 Serving 实例的配置。
     """
     try:
+        api_key = extract_api_key([p.model_dump(exclude_unset=True) for p in body.params or []])
         params_list = None
         if body.params is not None:
-            params_list = []
-            for p in body.params:
-                p_dict = p.model_dump(exclude_unset=True)
-                if p_dict.get('name') == 'api_key':
-                    val = p_dict.get('value', '')
-                    if not val or '****' in str(val):
-                        continue
-                params_list.append(p_dict)
+            params_list = sanitize_serving_params([
+                p.model_dump(exclude_unset=True)
+                for p in body.params
+            ])
             
         success = container.serving_registry._update(
             id, 
@@ -154,11 +140,14 @@ def update_serving_instance(id: str, body: ServingUpdateSchema):
         )
         if not success:
             raise HTTPException(status_code=404, detail=f"Serving instance with id {id} not found")
+        if api_key:
+            set_serving_credential(id, api_key)
             
         return ok({'id': id})
+    except HTTPException:
+        raise
     except Exception as e:
-        print(e)
-        raise HTTPException(status_code=500, detail=str(    e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete(
     "/{id}",
@@ -174,7 +163,10 @@ def delete_serving_instance(id: str):
         success = container.serving_registry._delete(id)
         if not success:
             raise HTTPException(status_code=404, detail=f"Serving instance with id {id} not found")
+        clear_serving_credential(id)
         return ok({'id': id})
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -193,6 +185,7 @@ def create_serving_instance(
     创建一个新的 Serving 实例。
     """
     try:
+        api_key = extract_api_key(params)
         # Get class default params info
         cls_info = None
         all_classes = container.serving_registry.get_serving_classes()
@@ -209,13 +202,9 @@ def create_serving_instance(
         final_params_map = {p['name']: copy.deepcopy(p) for p in cls_info['params']}
         
         # Merge User Params
-        for user_p in params:
+        for user_p in sanitize_serving_params(params):
             pname = user_p['name']
             
-            # Special validation for APILLMServing_request
-            if cls_name == 'APILLMServing_request' and pname == 'key_name_of_api_key':
-                raise ValueError("key_name_of_api_key should not be provided in input")
-
             if pname in final_params_map:
                 # Update existing param with user provided value
                 if 'value' in user_p:
@@ -224,14 +213,17 @@ def create_serving_instance(
                 # New param (e.g. api_key)
                 final_params_map[pname] = user_p
 
-        new_params = list(final_params_map.values())
+        new_params = sanitize_serving_params(list(final_params_map.values()))
 
         new_id = container.serving_registry._set(name, cls_name, new_params)
+        if api_key:
+            set_serving_credential(new_id, api_key)
         return ok({
             'id': new_id
         })
+    except HTTPException:
+        raise
     except Exception as e:
-        print(e)
         raise HTTPException(status_code=500, detail=str(e))
     
 @router.post(
@@ -247,39 +239,19 @@ def test_serving_instance(id: str, body: ServingTestSchema):
     try:
         prompt: str = body.prompt or "Hello, which model are you?"
         serving_info = container.serving_registry._get(id)
-        params_dict = {}
+        if not serving_info:
+            raise HTTPException(status_code=404, detail=f"Serving instance with id {id} not found")
         
         ## This part of code is only for APILLMServing_request
         if serving_info['cls_name'] == 'APILLMServing_request':
-            api_key_val = None
-            key_name_var = f"DF_API_KEY_{id}"
-            
-            # First pass: find values
-            for params in serving_info['params']:
-                # Check 'value' first, then fallback to 'default_value'
-                current_val = params.get('value') if params.get('value') is not None else params.get('default_value')
-                
-                if params['name'] == 'api_key':
-                    api_key_val = current_val
-                elif params['name'] == 'key_name_of_api_key':
-                    key_name_var = current_val
-            
-            # Set env var if api_key is provided
-            if api_key_val:
-                os.environ[key_name_var] = api_key_val
-                
-            # Build params dict for init
-            for params in serving_info['params']:
-                if params['name'] != 'api_key':
-                    params_dict[params['name']] = params.get('value') if params.get('value') is not None else params.get('default_value')
+            params_dict = build_api_serving_init_params(serving_info, id)
         else:
+            params_dict = {}
             for params in serving_info['params']:
                  params_dict[params['name']] = params.get('value') if params.get('value') is not None else params.get('default_value')
 
         serving_instance = SERVING_CLS_REGISTRY[serving_info['cls_name']](**params_dict)
         responses = serving_instance.generate_from_input([prompt])
-        if not serving_instance:
-            raise HTTPException(status_code=404, detail=f"Serving instance with id {id} not found")
         response = {
             'id': id,
             'name': serving_info['name'],
@@ -287,6 +259,9 @@ def test_serving_instance(id: str, body: ServingTestSchema):
             'response': responses[0]
         }
         return ok(response)
+    except ServingCredentialMissingError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
-        print(e)
         raise HTTPException(status_code=500, detail=str(e))

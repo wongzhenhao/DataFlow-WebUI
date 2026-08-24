@@ -21,6 +21,8 @@ from contextlib import redirect_stdout, redirect_stderr
 
 from app.services.param_coercion import coerce_param_value
 from app.services.pipeline_compile_check import compile_check
+from app.services.runtime_credentials import get_worker_credential_environment
+from app.services.serving_runtime import build_api_serving_init_params
 
 logger = get_logger(__name__)
 
@@ -319,30 +321,11 @@ def dataflow_pipeline_execute(pipeline_config: Dict[str, Any], dataflow_runtime:
                                 serving_info = dataflow_runtime['serving_map'][serving_id]
                                 params_dict = {}
                                 if serving_info['cls_name'] == 'APILLMServing_request':
-                                    api_key_val = None
                                     # Use the serving_id from serving_info (set by _get method)
                                     actual_serving_id = serving_info.get('id', serving_id)
-                                    key_name_var = f"DF_API_KEY_{actual_serving_id}"
-                                    
-                                    # First pass: find values
-                                    for params in serving_info['params']:
-                                        # Check 'value' first, then fallback to 'default_value'
-                                        current_val = params.get('value') if params.get('value') is not None else params.get('default_value')
-                                        
-                                        if params['name'] == 'api_key':
-                                            api_key_val = current_val
-                                        elif params['name'] == 'key_name_of_api_key':
-                                            key_name_var = current_val
-                                            params['value'] = key_name_var
-                                        
-                                    # Build params dict for init
-                                    for params in serving_info['params']:
-                                        if params['name'] != 'api_key':
-                                            params_dict[params['name']] = params.get('value') if params.get('value') is not None else params.get('default_value')
+                                    params_dict = build_api_serving_init_params(serving_info, actual_serving_id)
                                     
                                     logger.info(f"Initializing serving with params: {params_dict}")
-                                    os.environ[key_name_var] = api_key_val
-                                    logger.info(f"Environment variable {key_name_var} set to {api_key_val}")
                                     serving_instance = APILLMServing_request(**params_dict)
                                 else:
                                     raise DataFlowEngineError(f"Unsupported serving class: {serving_info['cls_name']}")
@@ -358,30 +341,11 @@ def dataflow_pipeline_execute(pipeline_config: Dict[str, Any], dataflow_runtime:
                                 serving_info = dataflow_runtime['embedding_serving_map'][serving_id]
                                 params_dict = {}
                                 if serving_info['cls_name'] == 'APILLMServing_request':
-                                    api_key_val = None
                                     # Use the serving_id from serving_info (set by _get method)
                                     actual_serving_id = serving_info.get('id', serving_id)
-                                    key_name_var = f"DF_API_KEY_{actual_serving_id}"
-                                    
-                                    # First pass: find values
-                                    for params in serving_info['params']:
-                                        # Check 'value' first, then fallback to 'default_value'
-                                        current_val = params.get('value') if params.get('value') is not None else params.get('default_value')
-                                        
-                                        if params['name'] == 'api_key':
-                                            api_key_val = current_val
-                                        elif params['name'] == 'key_name_of_api_key':
-                                            key_name_var = current_val
-                                            params['value'] = key_name_var
-                                        
-                                    # Build params dict for init
-                                    for params in serving_info['params']:
-                                        if params['name'] != 'api_key':
-                                            params_dict[params['name']] = params.get('value') if params.get('value') is not None else params.get('default_value')
+                                    params_dict = build_api_serving_init_params(serving_info, actual_serving_id)
                                     
                                     logger.info(f"Initializing serving with params: {params_dict}")
-                                    os.environ[key_name_var] = api_key_val
-                                    logger.info(f"Environment variable {key_name_var} set to {api_key_val}")
                                     serving_instance = APILLMServing_request(**params_dict)
                                 else:
                                     raise DataFlowEngineError(f"Unsupported serving class: {serving_info['cls_name']}")
@@ -852,7 +816,8 @@ class RayPipelineExecutor:
         dataflow_runtime: Dict[str, Any],
         task_id: str,
         pipeline_registry_path: str,
-        pipeline_execution_path: str
+        pipeline_execution_path: str,
+        runtime_credentials: Dict[str, str],
     ) -> Dict[str, Any]:
         """
         Ray 远程执行函数
@@ -879,6 +844,10 @@ class RayPipelineExecutor:
             from app.core.logger_setup import get_logger
             from app.core.config import settings
             from app.services.dataflow_engine import DataFlowEngine
+            from app.services.runtime_credentials import clear_worker_credentials_from_environment
+            clear_worker_credentials_from_environment()
+            for env_name, credential in runtime_credentials.items():
+                os.environ[env_name] = credential
             for ext in settings._DATAFLOW_EXTENSIONS:
                 try:
                     importlib.import_module(ext)
@@ -968,6 +937,9 @@ class RayPipelineExecutor:
                 "started_at": datetime.now().isoformat(),
                 "completed_at": datetime.now().isoformat()
             }
+        finally:
+            from app.services.runtime_credentials import clear_worker_credentials_from_environment
+            clear_worker_credentials_from_environment()
     
     async def submit_execution(
         self,
@@ -996,12 +968,14 @@ class RayPipelineExecutor:
         
         # 提交远程任务
         try:
+            runtime_credentials = get_worker_credential_environment()
             future = self._execute_pipeline_remote.remote(
                 pipeline_config,
                 dataflow_runtime,
                 task_id,
                 pipeline_registry_path,
-                pipeline_execution_path
+                pipeline_execution_path,
+                runtime_credentials,
             )
             
             # 保存任务引用，用于后续kill操作
