@@ -431,6 +431,7 @@ class DataFlowEngine:
         
         # ✅ 新增：算子粒度运行结果详情
         operators_detail: Dict[str, Dict[str, Any]] = {}
+        execution_results: List[Dict[str, Any]] = []
 
         # ✅ 新增：实时更新执行状态到文件
         def update_execution_status(status: str = None, partial_output: Dict[str, Any] = None):
@@ -801,10 +802,10 @@ class DataFlowEngine:
                     # ✅ 获取处理后的数据量
                     # 尝试从 output file 获取
                     sample_count = 0
+                    f_path = None
                     storage_obj = run_params.get("storage")
                     
                     if storage_obj:
-                         f_path = None
                          # 尝试使用 _get_cache_file_path 推断输出文件路径
                          if hasattr(storage_obj, "_get_cache_file_path") and hasattr(storage_obj, "operator_step"):
                              try:
@@ -838,7 +839,11 @@ class DataFlowEngine:
                     
                     # ✅ 记录缓存文件信息
                     from app.core.config import settings
-                    cache_file = os.path.join(settings.CACHE_DIR, f"dataflow_cache_step_{op_idx}.jsonl")
+                    cache_file = f_path or os.path.join(
+                        settings.CACHE_DIR,
+                        f"{task_id}_output",
+                        f"dataflow_cache_step_step{op_idx + 1}.jsonl",
+                    )
                     cache_file_exists = os.path.exists(cache_file)
                     logger.info(f"[Pipeline] Operator {op_name} completed, cache_file: {cache_file}, exists: {cache_file_exists}")
                     if cache_file_exists:
@@ -853,7 +858,13 @@ class DataFlowEngine:
                     execution_results.append({
                         "operator": op_name,
                         "status": "completed",
-                        "index": op_idx
+                        "index": op_idx,
+                        "cache_file": f_path if f_path and os.path.exists(f_path) else None,
+                    })
+                    update_execution_status("running", {
+                        "operators_detail": operators_detail,
+                        "operator_logs": operator_logs,
+                        "execution_results": execution_results,
                     })
                     
                 except Exception as e:
@@ -868,7 +879,8 @@ class DataFlowEngine:
                         logger.warning(f"Failed to inspect available columns after operator error: {inspect_exc}")
                     update_execution_status("failed", {
                         "operators_detail": operators_detail,
-                        "operator_logs": operator_logs
+                        "operator_logs": operator_logs,
+                        "execution_results": execution_results,
                     })
                     raise DataFlowEngineError(
                         f"执行Operator失败: {op_name}",
@@ -907,15 +919,21 @@ class DataFlowEngine:
             completed_at = datetime.now().isoformat()
             error_log = f"[{completed_at}] ERROR: {e.message}"
             error_op_name = e.context.get("operator")
+            error_op_index = e.context.get("operator_index")
             # Try to find the op_key if possible, or just log generally
             
             if error_op_name:
                 # Find matching key in operators_detail or iterate
                 target_key = None
                 for k, v in operators_detail.items():
-                    if v["name"] == error_op_name:
+                    if v.get("index") == error_op_index:
                         target_key = k
                         break
+                if target_key is None:
+                    for k, v in operators_detail.items():
+                        if v.get("name") == error_op_name:
+                            target_key = k
+                            break
                 
                 if target_key:
                     add_log("run", f"[{completed_at}] ERROR: {e.message}", target_key)
@@ -932,6 +950,8 @@ class DataFlowEngine:
             output["error_context"] = e.context
             output["original_error"] = str(e.original_error) if e.original_error else None
             output["operators_detail"] = operators_detail
+            output["operator_logs"] = operator_logs
+            output["execution_results"] = execution_results
 
             
             return {
@@ -956,6 +976,8 @@ class DataFlowEngine:
             output["error"] = "Pipeline执行过程中发生未预期的错误"
             output["error_message"] = str(e)
             output["operators_detail"] = operators_detail
+            output["operator_logs"] = operator_logs
+            output["execution_results"] = execution_results
             
             return {
                 "task_id": task_id,

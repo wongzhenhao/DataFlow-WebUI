@@ -647,8 +647,10 @@ export default {
                 // The execution list already carries enough information for completed runs.
             }
 
-            const availableSteps = this.steps.filter((step) => ['completed', 'running', 'failed'].includes(step.status))
-            const target = availableSteps.at(-1) || this.steps.at(-1)
+            const target = this.steps.find((step) => step.status === 'running')
+                || this.steps.filter((step) => step.status === 'completed').at(-1)
+                || this.steps.find((step) => step.status === 'failed')
+                || this.steps.at(-1)
             if (target) await this.selectStep(target.index)
             else this.selectedStep = null
         },
@@ -705,6 +707,8 @@ export default {
             try {
                 const response = await fetch(this.stepDownloadUrl(taskId, step))
                 if (!response.ok) return result
+                const contentType = String(response.headers.get('content-type') || '').toLowerCase()
+                if (!contentType.includes('jsonl') && !contentType.includes('ndjson')) return result
                 const text = await response.text()
                 const lines = text.split(/\r?\n/).filter((line) => line.trim())
                 const sampleData = []

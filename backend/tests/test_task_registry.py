@@ -7,7 +7,9 @@
     pytest tests/test_task_registry.py::test_create_task -v  # 运行单个测试
 """
 import pytest
+from types import SimpleNamespace
 from app.services.task_registry import TaskRegistry
+from app.services import task_registry as task_registry_module
 
 
 class TestTaskRegistry:
@@ -296,3 +298,108 @@ def test_filter_by_status(task_registry, sample_task_data, status):
     filtered_tasks = task_registry.list(status=status)
     assert len(filtered_tasks) >= 1
     assert all(t["status"] == status for t in filtered_tasks)
+
+
+def test_failed_execution_keeps_completed_step_results(task_registry, tmp_path, monkeypatch):
+    monkeypatch.setattr(task_registry_module.settings, "CACHE_DIR", str(tmp_path))
+    task_id = "failed-task"
+    cache_dir = tmp_path / f"{task_id}_output"
+    cache_dir.mkdir()
+    (cache_dir / "dataflow_cache_step_step1.jsonl").write_text(
+        '{"value": 1}\n{"value": 2}\n', encoding="utf-8"
+    )
+    task_registry._write({
+        "tasks": {
+            task_id: {
+                "task_id": task_id,
+                "pipeline_config": {"operators": [{"name": "First"}, {"name": "Second"}]},
+                "status": "failed",
+                "output": {
+                    "error_context": {"operator_index": 1},
+                    "operators_detail": {
+                        # Legacy duplicate-name handling could incorrectly mark this failed.
+                        "First_0": {"name": "First", "index": 0, "status": "failed", "sample_count": 2},
+                        "Second_1": {"name": "Second", "index": 1, "status": "failed"},
+                    },
+                },
+                "logs": [],
+            }
+        }
+    })
+
+    result = task_registry.get_execution_result(task_id, step=0, limit=1)
+    status = task_registry.get_execution_status(task_id)
+
+    assert result["file_exists"] is True
+    assert result["total_count"] == 2
+    assert result["sample_data"] == [{"value": 1}]
+    assert result["source_task_id"] == task_id
+    assert status["operators_detail"]["First_0"]["status"] == "completed"
+    assert status["operators_detail"]["Second_1"]["status"] == "failed"
+
+
+def test_resumed_execution_exposes_parent_and_child_as_one_pipeline(task_registry, tmp_path, monkeypatch):
+    monkeypatch.setattr(task_registry_module.settings, "CACHE_DIR", str(tmp_path))
+    parent_id = "parent-task"
+    child_id = "child-task"
+    parent_cache = tmp_path / f"{parent_id}_output"
+    child_cache = tmp_path / f"{child_id}_output"
+    parent_cache.mkdir()
+    child_cache.mkdir()
+    (parent_cache / "dataflow_cache_step_step1.jsonl").write_text('{"stage": 1}\n', encoding="utf-8")
+    (parent_cache / "dataflow_cache_step_step2.jsonl").write_text('{"stage": 2}\n', encoding="utf-8")
+    (child_cache / "dataflow_cache_step_step1.jsonl").write_text('{"stage": 3}\n', encoding="utf-8")
+    task_registry._write({
+        "tasks": {
+            parent_id: {
+                "task_id": parent_id,
+                "pipeline_config": {"input_dataset": "source", "operators": [{"name": "A"}, {"name": "B"}]},
+                "status": "failed",
+                "output": {
+                    "operators_detail": {
+                        "A_0": {"name": "A", "index": 0, "status": "completed", "sample_count": 1},
+                        "B_1": {"name": "B", "index": 1, "status": "completed", "sample_count": 1},
+                    }
+                },
+                "logs": [],
+            },
+            child_id: {
+                "task_id": child_id,
+                "parent_task_id": parent_id,
+                "resume_from_step": 1,
+                "pipeline_config": {"input_dataset": "resume", "operators": [{"name": "C"}]},
+                "status": "completed",
+                "output": {
+                    "operators_detail": {
+                        "C_0": {"name": "C", "index": 0, "status": "completed", "sample_count": 1},
+                    }
+                },
+                "logs": [],
+            },
+        }
+    })
+
+    status = task_registry.get_execution_status(child_id)
+    inherited = task_registry.get_execution_result(child_id, step=1)
+    resumed = task_registry.get_execution_result(child_id, step=2)
+    monkeypatch.setattr(
+        task_registry_module.container,
+        "dataset_registry",
+        SimpleNamespace(
+            get=lambda dataset_id: {"root": str(child_cache / "dataflow_cache_step_step1.jsonl")}
+        ),
+    )
+    inferred = task_registry._infer_resume_lineage(
+        {"input_dataset": {"id": "resume-dataset"}},
+        task_registry._read(),
+    )
+
+    assert [detail["name"] for detail in status["operators_detail"].values()] == ["A", "B", "C"]
+    assert len(status["pipeline_config"]["operators"]) == 3
+    assert inherited["sample_data"] == [{"stage": 2}]
+    assert inherited["source_task_id"] == parent_id
+    assert inherited["source_step"] == 1
+    assert resumed["sample_data"] == [{"stage": 3}]
+    assert resumed["source_task_id"] == child_id
+    assert resumed["source_step"] == 0
+    assert inferred == (child_id, 2)

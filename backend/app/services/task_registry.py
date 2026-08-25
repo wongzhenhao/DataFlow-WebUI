@@ -3,6 +3,8 @@ import os
 import hashlib
 import pandas
 import datetime
+import copy
+import re
 from typing import Dict, List, Optional, Any, Tuple
 from app.core.container import container
 from app.core.config import settings
@@ -246,7 +248,15 @@ class TaskRegistry:
         """列出所有任务执行记录"""
         data = self._read()
         # 直接返回字典列表，不需要转换为对象
-        return list(data.get("tasks", {}).values())
+        executions = []
+        for task_id, record in data.get("tasks", {}).items():
+            item = copy.deepcopy(record)
+            view = self._build_execution_view(task_id, data)
+            item["pipeline_config"] = view["pipeline_config"]
+            item.setdefault("output", {})["operators_detail"] = view["operators_detail"]
+            item["output"]["operator_logs"] = view["operator_logs"]
+            executions.append(item)
+        return executions
     
     def get_execution_status(
         self, 
@@ -268,18 +278,18 @@ class TaskRegistry:
         if not execution_data:
             return None
         
-        # operator_progress is now deprecated, use operators_detail from output
-        output = execution_data.get("output", {})
+        view = self._build_execution_view(task_id, data)
         
         return {
             "task_id": task_id,
             "pipeline_id": execution_data.get("pipeline_id"),
-            "pipeline_config": execution_data.get("pipeline_config"),
+            "pipeline_config": view["pipeline_config"],
             "status": execution_data.get("status"),
-            "operators_detail": output.get("operators_detail", {}),
-            "operator_logs": output.get("operator_logs", {}),
+            "operators_detail": view["operators_detail"],
+            "operator_logs": view["operator_logs"],
             "logs": execution_data.get("logs", []),
-            # "output": output, # Output removed as requested to avoid duplication
+            "parent_task_id": execution_data.get("parent_task_id"),
+            "resume_from_step": execution_data.get("resume_from_step"),
             "started_at": execution_data.get("started_at"),
             "completed_at": execution_data.get("completed_at"),
         }
@@ -315,6 +325,210 @@ class TaskRegistry:
         # Default fallback to searching in main logs?
         return []
 
+    def _cache_file_for_local_step(
+        self,
+        task_id: str,
+        execution_data: Dict[str, Any],
+        step: int,
+    ) -> str:
+        """Resolve one task-local operator output without assuming task success."""
+        output = execution_data.get("output") or {}
+        for result in output.get("execution_results") or []:
+            if (
+                result.get("index") == step
+                and result.get("cache_file")
+                and os.path.exists(result["cache_file"])
+            ):
+                return result["cache_file"]
+
+        filename = f"dataflow_cache_step_step{step + 1}.jsonl"
+        task_cache = os.path.join(settings.CACHE_DIR, f"{task_id}_output", filename)
+        if os.path.exists(task_cache):
+            return task_cache
+
+        # Compatibility with executions created before task-specific cache folders.
+        legacy_candidates = (
+            os.path.join(settings.CACHE_DIR, filename),
+            os.path.join(settings.CACHE_DIR, f"dataflow_cache_step_{step}.jsonl"),
+        )
+        return next((path for path in legacy_candidates if os.path.exists(path)), task_cache)
+
+    def _effective_local_details(
+        self,
+        task_id: str,
+        execution_data: Dict[str, Any],
+    ) -> Dict[str, Dict[str, Any]]:
+        """Return display details, repairing legacy duplicate-name failure marking."""
+        output = execution_data.get("output") or {}
+        details = copy.deepcopy(output.get("operators_detail") or {})
+        actual_failed_index = (output.get("error_context") or {}).get("operator_index")
+
+        for detail in details.values():
+            index = detail.get("index")
+            if not isinstance(index, int):
+                continue
+            cache_file = self._cache_file_for_local_step(task_id, execution_data, index)
+            detail["result_available"] = os.path.exists(cache_file)
+            if (
+                detail.get("status") == "failed"
+                and actual_failed_index is not None
+                and index != actual_failed_index
+                and detail["result_available"]
+            ):
+                detail["status"] = "completed"
+                detail.pop("error", None)
+        return details
+
+    def _build_execution_view(
+        self,
+        task_id: str,
+        data: Optional[Dict[str, Any]] = None,
+        visited: Optional[set] = None,
+    ) -> Dict[str, Any]:
+        """Build the virtual full pipeline shown for a resumed execution."""
+        data = data or self._read()
+        execution_data = data.get("tasks", {}).get(task_id)
+        if not execution_data:
+            return {"operators_detail": {}, "operator_logs": {}, "pipeline_config": {}}
+
+        visited = set(visited or ())
+        if task_id in visited:
+            logger.warning(f"Ignoring cyclic execution lineage at task {task_id}")
+            return {"operators_detail": {}, "operator_logs": {}, "pipeline_config": {}}
+        visited.add(task_id)
+
+        local_details = self._effective_local_details(task_id, execution_data)
+        local_logs = copy.deepcopy((execution_data.get("output") or {}).get("operator_logs") or {})
+        local_config = copy.deepcopy(execution_data.get("pipeline_config") or {})
+        parent_task_id = execution_data.get("parent_task_id")
+        resume_from_step = execution_data.get("resume_from_step")
+        if not parent_task_id or not isinstance(resume_from_step, int):
+            return {
+                "operators_detail": local_details,
+                "operator_logs": local_logs,
+                "pipeline_config": local_config,
+            }
+
+        parent_view = self._build_execution_view(parent_task_id, data, visited)
+        offset = resume_from_step + 1
+        merged_details = {
+            key: value
+            for key, value in parent_view["operators_detail"].items()
+            if value.get("index", -1) < offset
+        }
+        merged_logs = copy.deepcopy(parent_view["operator_logs"])
+        for _, detail in sorted(local_details.items(), key=lambda item: item[1].get("index", -1)):
+            mapped = copy.deepcopy(detail)
+            mapped["index"] = detail.get("index", 0) + offset
+            merged_details[f'{mapped.get("name", "operator")}_{mapped["index"]}'] = mapped
+        for key, value in local_logs.items():
+            merged_logs[f"resume:{key}"] = value
+
+        parent_config = parent_view["pipeline_config"]
+        merged_config = copy.deepcopy(local_config)
+        merged_config["operators"] = (
+            copy.deepcopy((parent_config.get("operators") or [])[:offset])
+            + copy.deepcopy(local_config.get("operators") or [])
+        )
+        if parent_config.get("input_dataset") is not None:
+            merged_config["input_dataset"] = copy.deepcopy(parent_config["input_dataset"])
+
+        return {
+            "operators_detail": merged_details,
+            "operator_logs": merged_logs,
+            "pipeline_config": merged_config,
+        }
+
+    def resolve_execution_step(
+        self,
+        task_id: str,
+        step: int,
+        data: Optional[Dict[str, Any]] = None,
+        visited: Optional[set] = None,
+    ) -> Dict[str, Any]:
+        """Map a displayed (global) step to its physical task/cache source."""
+        data = data or self._read()
+        execution_data = data.get("tasks", {}).get(task_id)
+        if not execution_data:
+            return None
+
+        visited = set(visited or ())
+        if task_id in visited:
+            raise ValueError(f"Cyclic execution lineage at task {task_id}")
+        visited.add(task_id)
+
+        parent_task_id = execution_data.get("parent_task_id")
+        resume_from_step = execution_data.get("resume_from_step")
+        if parent_task_id and isinstance(resume_from_step, int) and step <= resume_from_step:
+            return self.resolve_execution_step(parent_task_id, step, data, visited)
+
+        local_step = step
+        if parent_task_id and isinstance(resume_from_step, int):
+            local_step = step - (resume_from_step + 1)
+        if local_step < 0:
+            raise ValueError(f"Invalid step index: {step}")
+
+        config_ops = (execution_data.get("pipeline_config") or {}).get("operators") or []
+        local_details = self._effective_local_details(task_id, execution_data)
+        max_local_step = max(
+            [len(config_ops) - 1]
+            + [detail.get("index", -1) for detail in local_details.values()]
+        )
+        if local_step > max_local_step:
+            raise ValueError(f"Invalid step index: {step}")
+
+        detail = next(
+            (value for value in local_details.values() if value.get("index") == local_step),
+            {},
+        )
+        return {
+            "source_task_id": task_id,
+            "source_step": local_step,
+            "cache_file": self._cache_file_for_local_step(task_id, execution_data, local_step),
+            "operator_name": detail.get("name") or f"step_{step}",
+            "operator_status": detail.get("status"),
+        }
+
+    def _infer_resume_lineage(
+        self,
+        pipeline_config: Dict[str, Any],
+        data: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Tuple[str, int]]:
+        """Infer lineage when a pipeline starts from another task's cache dataset."""
+        input_dataset = pipeline_config.get("input_dataset")
+        dataset_id = input_dataset.get("id") if isinstance(input_dataset, dict) else input_dataset
+        if not dataset_id:
+            return None
+        dataset = container.dataset_registry.get(dataset_id)
+        root = dataset.get("root") if dataset else None
+        if not root:
+            return None
+
+        match = re.fullmatch(r"dataflow_cache_step_step(\d+)\.jsonl", os.path.basename(root))
+        cache_dir = os.path.basename(os.path.dirname(root))
+        if not match or not cache_dir.endswith("_output"):
+            return None
+
+        source_task_id = cache_dir[:-len("_output")]
+        data = data or self._read()
+        source_task = data.get("tasks", {}).get(source_task_id)
+        if not source_task:
+            return None
+
+        source_local_step = int(match.group(1)) - 1
+        if source_local_step < 0:
+            return None
+        source_resume_step = source_task.get("resume_from_step")
+        if source_task.get("parent_task_id") and isinstance(source_resume_step, int):
+            source_global_step = source_resume_step + 1 + source_local_step
+        else:
+            source_global_step = source_local_step
+
+        source = self.resolve_execution_step(source_task_id, source_global_step, data)
+        if not source or os.path.normcase(os.path.abspath(source["cache_file"])) != os.path.normcase(os.path.abspath(root)):
+            return None
+        return source_task_id, source_global_step
+
     def get_execution_result(
         self, 
         task_id: str,
@@ -339,45 +553,36 @@ class TaskRegistry:
             return None
         
         # 获取输出
-        output = execution_data.get("output", {})
         logs = execution_data.get("logs", [])
+        view = self._build_execution_view(task_id, data)
         
         # 获取执行结果和算子进度
-        execution_results = output.get("execution_results", [])
-        operators_detail = output.get("operators_detail", {})
-        operator_logs = output.get("operator_logs", {})
-        
-        # 确定要查询的步骤索引
+        operators_detail = view["operators_detail"]
+        operator_logs = view["operator_logs"]
+
         if step is None:
-            # 默认返回最后一个已完成的步骤
-            if execution_results:
-                step = execution_results[-1].get("index", 0)
-            else:
-                # 尝试查找正在运行的步骤
-                # Find operator with status 'running' in operators_detail
-                running_op = None
-                for op_key, op_info in operators_detail.items():
-                    if op_info.get("status") == "running":
-                        running_op = op_info
-                        break
-                
-                if running_op:
-                    step = running_op.get("index", 0)
-                else:
-                    step = 0
+            available = []
+            for detail in operators_detail.values():
+                index = detail.get("index")
+                if not isinstance(index, int):
+                    continue
+                source = self.resolve_execution_step(task_id, index, data)
+                if source and os.path.exists(source["cache_file"]):
+                    available.append(index)
+            step = max(available, default=0)
         
         # 读取缓存文件（使用绝对路径）
-        cache_path = settings.CACHE_DIR
-        cache_file_prefix = "dataflow_cache_step"
-        cache_file = os.path.join(cache_path, f"{cache_file_prefix}_step{step}.jsonl")
+        try:
+            source = self.resolve_execution_step(task_id, step, data)
+        except ValueError:
+            if operators_detail or (view["pipeline_config"].get("operators") or []):
+                raise
+            source = None
+        cache_file = source["cache_file"] if source else ""
         
         sample_data = []
         total_count = 0
         file_exists = False
-        
-        # 如果当前 step 的文件不存在，尝试读取上一步的文件
-        if not os.path.exists(cache_file) and step > 0:
-            cache_file = os.path.join(cache_path, f"{cache_file_prefix}_step{step-1}.jsonl")
         
         if os.path.exists(cache_file):
             file_exists = True
@@ -393,22 +598,13 @@ class TaskRegistry:
             except Exception as e:
                 logger.error(f"Failed to read cache file {cache_file}: {e}")
         
-        # 获取算子信息
-        operator_name = None
-        operator_status = None
-        
-        # 从 operators_detail 中查找
-        # Need to find entry with index == step
-        for op_key, op_val in operators_detail.items():
-            if op_val.get("index") == step:
-                operator_name = op_val.get("name")
-                operator_status = op_val.get("status")
-                break
+        operator_name = source.get("operator_name") if source else None
+        operator_status = source.get("operator_status") if source else None
 
         return {
             "task_id": task_id,
             "pipeline_id": execution_data.get("pipeline_id"),
-            "pipeline_config": execution_data.get("pipeline_config"),
+            "pipeline_config": view["pipeline_config"],
             "status": execution_data.get("status"),
             "step": step,
             "operator_name": operator_name,
@@ -418,6 +614,8 @@ class TaskRegistry:
             "total_count": total_count,
             "file_exists": file_exists,
             "cache_file": cache_file,
+            "source_task_id": source.get("source_task_id") if source else None,
+            "source_step": source.get("source_step") if source else None,
             "logs": logs,
             "operator_logs": operator_logs,
             "started_at": execution_data.get("started_at"),
@@ -428,7 +626,9 @@ class TaskRegistry:
     async def start_execution_async(
         self, 
         pipeline_id: Optional[str] = None, 
-        config: Optional[Dict[str, Any]] = None
+        config: Optional[Dict[str, Any]] = None,
+        parent_task_id: Optional[str] = None,
+        resume_from_step: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         异步开始执行Pipeline（使用 Ray）
@@ -456,6 +656,40 @@ class TaskRegistry:
             pipeline_config = config
             pipeline_name = "Custom Pipeline"
             logger.info("Executing pipeline with provided config asynchronously")
+
+        registry_data = self._read()
+        if not parent_task_id:
+            inferred_lineage = self._infer_resume_lineage(pipeline_config, registry_data)
+            if inferred_lineage:
+                parent_task_id, resume_from_step = inferred_lineage
+                logger.info(
+                    f"Inferred resumed execution from task {parent_task_id} "
+                    f"step {resume_from_step}"
+                )
+
+        if resume_from_step is not None and not parent_task_id:
+            raise ValueError("parent_task_id is required when resume_from_step is provided")
+        if parent_task_id:
+            if parent_task_id not in registry_data.get("tasks", {}):
+                raise ValueError(f"Parent task with id {parent_task_id} not found")
+            if resume_from_step is None:
+                parent_view = self._build_execution_view(parent_task_id, registry_data)
+                available = []
+                for detail in parent_view["operators_detail"].values():
+                    index = detail.get("index")
+                    if not isinstance(index, int):
+                        continue
+                    source = self.resolve_execution_step(parent_task_id, index, registry_data)
+                    if source and os.path.exists(source["cache_file"]):
+                        available.append(index)
+                if not available:
+                    raise ValueError(f"Parent task {parent_task_id} has no reusable operator output")
+                resume_from_step = max(available)
+            source = self.resolve_execution_step(parent_task_id, resume_from_step, registry_data)
+            if not source or not os.path.exists(source["cache_file"]):
+                raise ValueError(
+                    f"Parent task {parent_task_id} has no result for step {resume_from_step}"
+                )
         
         # 生成执行ID
         task_id = self._generate_task_id()
@@ -485,6 +719,9 @@ class TaskRegistry:
             "logs": [f"[{self.get_current_time()}] Pipeline execution queued"],
             "operator_progress": {}
         }
+        if parent_task_id:
+            initial_result["parent_task_id"] = parent_task_id
+            initial_result["resume_from_step"] = resume_from_step
         
         # 保存初始状态
         data = self._read()

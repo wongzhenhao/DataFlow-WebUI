@@ -138,42 +138,38 @@ def download_task_result(task_id: str, step: int = None):
             raise HTTPException(404, f"Task with id {task_id} not found")
         
         # 获取执行结果
-        output = execution_data.get("output", {})
-        execution_results = output.get("execution_results", [])
+        view = container.task_registry._build_execution_view(task_id, data)
         
         # 确定要下载的步骤索引
         if step is None:
             # 默认下载最后一个已完成的步骤
-            if execution_results:
-                step = execution_results[-1].get("index", 0)
-            else:
+            result = container.task_registry.get_execution_result(task_id)
+            step = result.get("step") if result else None
+            if step is None:
                 raise HTTPException(400, "No completed operators found")
         
         # 检查步骤是否有效
-        if step < 0 or step >= len(execution_results):
-            raise HTTPException(400, f"Invalid step index: {step}. Valid range: 0-{len(execution_results)-1}")
+        try:
+            source = container.task_registry.resolve_execution_step(task_id, step, data)
+        except ValueError as exc:
+            max_step = max(
+                [detail.get("index", -1) for detail in view["operators_detail"].values()],
+                default=-1,
+            )
+            raise HTTPException(400, f"{exc}. Valid range: 0-{max_step}")
         
         # 获取算子信息
-        operator_info = execution_results[step]
-        operator_name = operator_info.get("operator", f"step_{step}")
+        operator_name = source.get("operator_name", f"step_{step}")
         
         # 构建缓存文件路径（使用绝对路径）
-        from app.core.config import settings
-        cache_path = settings.CACHE_DIR
-        cache_task_dir = f"{task_id}_output"
-        cache_file_prefix = "dataflow_cache_step"
-        actual_step_for_json = step + 1
-
-        cache_file_name = f"{cache_file_prefix}_step{actual_step_for_json}.jsonl"
-
-        cache_file = os.path.join(cache_path, cache_task_dir, cache_file_name)
+        cache_file = source["cache_file"]
         
         # 检查文件是否存在
         if not os.path.exists(cache_file):
             raise HTTPException(404, f"Result file not found for step {step}: {cache_file}")
         
         # 返回文件下载
-        filename = f"{task_id}_{operator_name}_step{actual_step_for_json}.jsonl"
+        filename = f"{task_id}_{operator_name}_step{step + 1}.jsonl"
         logger.info(f"Downloading file: {cache_file} as {filename}")
         
         return FileResponse(
@@ -280,7 +276,12 @@ async def execute_pipeline(request: Request, pipeline_id):
 
 
 @router.post("/execute-async", response_model=ApiResponse[Dict], operation_id="execute_pipeline_async", summary="异步执行Pipeline（使用Ray）")
-async def execute_pipeline_async(request: Request, pipeline_id: str):
+async def execute_pipeline_async(
+    request: Request,
+    pipeline_id: str,
+    parent_task_id: str = None,
+    resume_from_step: int = None,
+):
     """
     异步执行 Pipeline
     
@@ -296,7 +297,9 @@ async def execute_pipeline_async(request: Request, pipeline_id: str):
 
         # 调用服务层开始异步执行
         result = await container.task_registry.start_execution_async(
-            pipeline_id=pipeline_id
+            pipeline_id=pipeline_id,
+            parent_task_id=parent_task_id,
+            resume_from_step=resume_from_step,
         )
         task_id = result["task_id"]
         logger.info(f"Async Execution ID: {task_id}, Task ID: {task_id}")
